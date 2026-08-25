@@ -9,8 +9,8 @@ vi.stubGlobal('localStorage', {
   clear: () => storage.clear()
 })
 
-const store = await import('./store.js')
-await import('./components/exercise-list.js')
+const store = await import('../src/store.js')
+await import('../src/components/exercise-list.js')
 
 beforeEach(() => {
   store.clearAllData()

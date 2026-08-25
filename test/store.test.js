@@ -13,7 +13,7 @@ let store
 beforeEach(async () => {
   storage.clear()
   vi.resetModules()
-  store = await import('./store.js')
+  store = await import('../src/store.js')
 })
 
 describe('uid', () => {
@@ -87,7 +87,7 @@ describe('profiles', () => {
     store.updateProfile(p.id, { plates: [{ kg: 10, count: Infinity }, { kg: 5, count: 2 }] })
 
     vi.resetModules()
-    const fresh = await import('./store.js')
+    const fresh = await import('../src/store.js')
     const loaded = fresh.getProfile(p.id)
 
     expect(loaded.plates[0]).toEqual({ kg: 10, count: Infinity })

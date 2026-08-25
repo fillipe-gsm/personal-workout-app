@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calcPlates, warmupWeights } from './plates.js'
+import { calcPlates, warmupWeights } from '../src/plates.js'
 
 const stdProfile = {
   barbellKg: 20,
