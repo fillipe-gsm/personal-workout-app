@@ -18,6 +18,7 @@ export function exercisesScreen() {
             if (!input.value.trim()) return
             addExercise(input.value)
             input.value = ''
+            rerender()
           }
         },
         input,
@@ -32,12 +33,17 @@ export function exercisesScreen() {
               'span',
               {},
               el('a', { class: 'btn', href: `#/history/${ex.id}` }, 'History'),
-              el('button', { class: 'btn btn-danger', onclick: () => { if (confirm(`Delete "${ex.name}"?`)) deleteExercise(ex.id) } }, '✕')
+              el('button', { class: 'btn btn-danger', onclick: () => { if (confirm(`Delete "${ex.name}"?`)) { deleteExercise(ex.id); rerender() } } }, '✕')
             )
           )
         )
       )
     )
   }
+
+  function rerender() {
+    document.querySelector('.screen')?.replaceWith(render())
+  }
+
   return render()
 }
