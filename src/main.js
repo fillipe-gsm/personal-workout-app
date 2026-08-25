@@ -1,36 +1,30 @@
-import { el } from './ui.js'
-import { route, start } from './router.js'
 import './styles.css'
-import { exercisesScreen } from './screens/exercises.js'
-import { plansScreen, planEditScreen } from './screens/plans.js'
-import { workoutScreen } from './screens/workout.js'
-import { historyScreen } from './screens/history.js'
-import { profilesScreen } from './screens/profiles.js'
-import { plateCalcScreen } from './screens/platecalc.js'
+import { route, start } from './router.js'
+import './components/home-menu.js'
+import './components/exercise-list.js'
+import './components/plans.js'
+import './components/workout-session.js'
+import './components/exercise-history.js'
+import './components/profiles.js'
+import './components/plate-calculator.js'
 
-const app = document.querySelector('#app')
-
-route('/', () => homeScreen())
-route('/exercises', () => exercisesScreen())
-route('/plans', () => plansScreen())
-route('/plan/:id', (p) => planEditScreen(p))
-route('/workout/:id', (p) => workoutScreen(p))
-route('/history/:id', (p) => historyScreen(p))
-route('/profiles', () => profilesScreen())
-route('/plates', (p, q) => plateCalcScreen(p, q))
-
-function homeScreen() {
-  const items = [
-    ['🏋️ Exercises', '#/exercises'],
-    ['📋 Workout Plans', '#/plans'],
-    ['⚖️ Weight Profiles', '#/profiles']
-  ]
-  return el(
-    'div',
-    { class: 'screen' },
-    el('h1', { class: 'title' }, 'Workout Tracker'),
-    el('nav', { class: 'menu' }, items.map(([label, href]) => el('a', { class: 'menu-item', href }, label)))
-  )
+function create(tag, attrs = {}) {
+  const node = document.createElement(tag)
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value != null) node.setAttribute(key, value)
+  }
+  return node
 }
 
-start(app)
+route('/', () => create('home-menu'))
+route('/exercises', () => create('exercise-list'))
+route('/plans', () => create('plan-list'))
+route('/plan/:id', (params) => create('plan-edit', { 'plan-id': params.id }))
+route('/workout/:id', (params) => create('workout-session', { 'plan-id': params.id }))
+route('/history/:id', (params) => create('exercise-history', { 'exercise-id': params.id }))
+route('/profiles', () => create('profile-list'))
+route('/plates', (params, query) =>
+  create('plate-calculator', { weight: query.weight, 'profile-id': query.profile })
+)
+
+start(document.querySelector('#app'))

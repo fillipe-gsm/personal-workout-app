@@ -13,11 +13,21 @@ export function uid() {
     : Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
+function normalize(d) {
+  for (const profile of d.profiles) {
+    profile.plates = (profile.plates || []).map(({ kg, count }) => ({
+      kg,
+      count: Number.isFinite(count) ? count : Infinity
+    }))
+  }
+  return d
+}
+
 export function load() {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return structuredClone(DEFAULT_DATA)
-    return { ...structuredClone(DEFAULT_DATA), ...JSON.parse(raw) }
+    return normalize({ ...structuredClone(DEFAULT_DATA), ...JSON.parse(raw) })
   } catch {
     return structuredClone(DEFAULT_DATA)
   }
@@ -38,6 +48,11 @@ export function save() {
 export function subscribe(fn) {
   listeners.add(fn)
   return () => listeners.delete(fn)
+}
+
+export function clearAllData() {
+  data = structuredClone(DEFAULT_DATA)
+  save()
 }
 
 export function addExercise(name) {

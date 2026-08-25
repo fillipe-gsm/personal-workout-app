@@ -9,14 +9,11 @@ vi.stubGlobal('localStorage', {
   clear: () => storage.clear()
 })
 
-let exercisesScreen
-let store
+const store = await import('./store.js')
+await import('./components/exercise-list.js')
 
-beforeEach(async () => {
-  storage.clear()
-  vi.resetModules()
-  store = await import('./store.js')
-  ;({ exercisesScreen } = await import('./screens/exercises.js'))
+beforeEach(() => {
+  store.clearAllData()
   document.body.innerHTML = ''
 })
 
@@ -24,47 +21,49 @@ function listNames() {
   return [...document.querySelectorAll('.list-item > span:first-child')].map((n) => n.textContent)
 }
 
-function submitNewExercise(name) {
-  const screen = document.querySelector('.screen')
-  const input = screen.querySelector('form input')
-  input.value = name
-  screen.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+async function submitNewExercise(name) {
+  const form = document.querySelector('exercise-list form')
+  form.querySelector('input').value = name
+  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await Promise.resolve()
 }
 
 describe('exercises screen', () => {
-  it('shows a new exercise in the list immediately after adding', () => {
-    document.body.append(exercisesScreen())
+  it('shows a new exercise in the list immediately after adding', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await Promise.resolve()
     expect(listNames()).toEqual([])
 
-    submitNewExercise('Squat')
+    await submitNewExercise('Squat')
 
     expect(listNames()).toEqual(['Squat'])
     expect(document.querySelector('form input').value).toBe('')
   })
 
-  it('adds multiple exercises and reflects them all without navigation', () => {
-    document.body.append(exercisesScreen())
-    submitNewExercise('Bench Press')
-    submitNewExercise('Deadlift')
+  it('adds multiple exercises and reflects them all without navigation', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('Bench Press')
+    await submitNewExercise('Deadlift')
 
     expect(listNames()).toEqual(['Bench Press', 'Deadlift'])
     expect(store.getData().exercises).toHaveLength(2)
   })
 
-  it('removes an exercise from the list immediately after deleting', () => {
+  it('removes an exercise from the list immediately after deleting', async () => {
     vi.stubGlobal('confirm', () => true)
-    document.body.append(exercisesScreen())
-    submitNewExercise('Squat')
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('Squat')
 
     document.querySelector('.btn-danger').click()
+    await Promise.resolve()
 
     expect(listNames()).toEqual([])
     expect(store.getData().exercises).toHaveLength(0)
   })
 
-  it('does not add an exercise with an empty name', () => {
-    document.body.append(exercisesScreen())
-    submitNewExercise('   ')
+  it('does not add an exercise with an empty name', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('   ')
 
     expect(store.getData().exercises).toHaveLength(0)
     expect(listNames()).toEqual([])

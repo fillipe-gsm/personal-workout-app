@@ -81,6 +81,18 @@ describe('profiles', () => {
     store.deleteProfile(p.id)
     expect(store.getProfile(p.id)).toBeUndefined()
   })
+
+  it('keeps infinite plate counts across a save/reload round-trip', async () => {
+    const p = store.addProfile('Gym', 20)
+    store.updateProfile(p.id, { plates: [{ kg: 10, count: Infinity }, { kg: 5, count: 2 }] })
+
+    vi.resetModules()
+    const fresh = await import('./store.js')
+    const loaded = fresh.getProfile(p.id)
+
+    expect(loaded.plates[0]).toEqual({ kg: 10, count: Infinity })
+    expect(loaded.plates[1]).toEqual({ kg: 5, count: 2 })
+  })
 })
 
 describe('records', () => {
