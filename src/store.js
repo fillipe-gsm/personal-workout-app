@@ -1,0 +1,119 @@
+const KEY = 'workout-app-data'
+
+const DEFAULT_DATA = {
+  exercises: [],
+  plans: [],
+  profiles: [],
+  records: []
+}
+
+export function uid() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+}
+
+export function load() {
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return structuredClone(DEFAULT_DATA)
+    return { ...structuredClone(DEFAULT_DATA), ...JSON.parse(raw) }
+  } catch {
+    return structuredClone(DEFAULT_DATA)
+  }
+}
+
+let data = load()
+const listeners = new Set()
+
+export function getData() {
+  return data
+}
+
+export function save() {
+  localStorage.setItem(KEY, JSON.stringify(data))
+  listeners.forEach((fn) => fn())
+}
+
+export function subscribe(fn) {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
+}
+
+export function addExercise(name) {
+  const ex = { id: uid(), name: name.trim() }
+  data.exercises.push(ex)
+  save()
+  return ex
+}
+
+export function deleteExercise(id) {
+  data.exercises = data.exercises.filter((e) => e.id !== id)
+  for (const plan of data.plans) {
+    plan.exerciseIds = plan.exerciseIds.filter((x) => x !== id)
+  }
+  save()
+}
+
+export function getExercise(id) {
+  return data.exercises.find((e) => e.id === id)
+}
+
+export function addPlan(name) {
+  const plan = { id: uid(), name: name.trim(), exerciseIds: [] }
+  data.plans.push(plan)
+  save()
+  return plan
+}
+
+export function updatePlan(id, patch) {
+  const plan = data.plans.find((p) => p.id === id)
+  if (plan) Object.assign(plan, patch)
+  save()
+  return plan
+}
+
+export function deletePlan(id) {
+  data.plans = data.plans.filter((p) => p.id !== id)
+  save()
+}
+
+export function getPlan(id) {
+  return data.plans.find((p) => p.id === id)
+}
+
+export function addProfile(name, barbellKg) {
+  const profile = { id: uid(), name: name.trim(), barbellKg, plates: [] }
+  data.profiles.push(profile)
+  save()
+  return profile
+}
+
+export function updateProfile(id, patch) {
+  const profile = data.profiles.find((p) => p.id === id)
+  if (profile) Object.assign(profile, patch)
+  save()
+  return profile
+}
+
+export function deleteProfile(id) {
+  data.profiles = data.profiles.filter((p) => p.id !== id)
+  save()
+}
+
+export function getProfile(id) {
+  return data.profiles.find((p) => p.id === id)
+}
+
+export function addRecord(record) {
+  const rec = { id: uid(), date: new Date().toISOString(), ...record }
+  data.records.push(rec)
+  save()
+  return rec
+}
+
+export function getRecordsForExercise(exerciseId) {
+  return data.records
+    .filter((r) => r.exerciseId === exerciseId)
+    .sort((a, b) => b.date.localeCompare(a.date))
+}
