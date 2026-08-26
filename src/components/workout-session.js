@@ -23,6 +23,47 @@ export class WorkoutSession extends HTMLElement {
       block.exercise = exercise
       blocks.append(block)
     }
+
+    this._stack = []
+    this._onPopState = () => {
+      const block = this._stack.pop()
+      if (block && block.sets.length) {
+        block.sets = []
+        block.saved = false
+        block.renderInput()
+      }
+    }
+    window.addEventListener('popstate', this._onPopState)
+
+    const st = history.state
+    if (st?.workoutPlanId === plan.id && Array.isArray(st.started)) {
+      for (const { exerciseId, tw } of st.started) {
+        const block = [...this.querySelectorAll('exercise-set-block')].find(
+          (b) => b.exercise.id === exerciseId
+        )
+        if (block && tw) {
+          block.sets = [
+            ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
+            ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
+          ]
+          block.saved = false
+          block.renderSets()
+          this._stack.push(block)
+        }
+      }
+    }
+  }
+
+  disconnectedCallback() {
+    if (this._onPopState) window.removeEventListener('popstate', this._onPopState)
+  }
+
+  _pushHistory() {
+    const started = this._stack.map((b) => ({
+      exerciseId: b.exercise.id,
+      tw: b.sets.find((s) => s.type === 'working')?.weightKg
+    }))
+    history.pushState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
   }
 }
 
@@ -54,6 +95,11 @@ export class ExerciseSetBlock extends HTMLElement {
       ]
       this.saved = false
       this.renderSets()
+      const session = this.closest('workout-session')
+      if (session?._stack) {
+        session._stack.push(this)
+        session._pushHistory()
+      }
     })
   }
 

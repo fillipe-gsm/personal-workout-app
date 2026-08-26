@@ -16,6 +16,7 @@ beforeEach(() => {
   store.clearAllData()
   document.body.innerHTML = ''
   location.hash = ''
+  history.replaceState(null, '', location.href)
 })
 
 function createPlanWithExercise(exerciseName = 'Squat') {
@@ -83,5 +84,62 @@ describe('workout training weight input', () => {
       Math.floor(73 * 0.6),
       Math.floor(73 * 0.8)
     ])
+  })
+
+  it('pushes history when starting and reverts on back (popstate)', async () => {
+    const pushSpy = vi.spyOn(window.history, 'pushState')
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(block.sets).toHaveLength(6)
+    expect(pushSpy).toHaveBeenCalled()
+    expect(session._stack).toHaveLength(1)
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: { workoutExercise: block.exercise.id } }))
+    await Promise.resolve()
+
+    expect(block.sets).toHaveLength(0)
+    expect(block.querySelector('form')).not.toBeNull()
+    expect(block.querySelector('.tw')).not.toBeNull()
+  })
+
+  it('restores started exercise when navigating back from plates', async () => {
+    const { plan, ex } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '77'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(block.sets).toHaveLength(6)
+    expect(history.state?.started).toEqual([{ exerciseId: ex.id, tw: 77 }])
+
+    document.body.innerHTML = ''
+    await Promise.resolve()
+
+    const session2 = document.createElement('workout-session')
+    session2.setAttribute('plan-id', plan.id)
+    document.body.append(session2)
+    await Promise.resolve()
+
+    const block2 = document.querySelector('exercise-set-block')
+    expect(block2.sets).toHaveLength(6)
+    expect(block2.sets.map((s) => s.weightKg)).toEqual([
+      Math.floor(77 * 0.4),
+      Math.floor(77 * 0.6),
+      Math.floor(77 * 0.8),
+      77, 77, 77
+    ])
+    expect(block2.querySelectorAll('.set-row')).toHaveLength(6)
   })
 })
