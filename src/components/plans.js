@@ -100,7 +100,15 @@ export class PlanEdit extends ReactiveElement {
       const plan = getData().plans.find((p) => p.id === planId)
       if (!plan) return
       const addBtn = e.target.closest('[data-add]')
-      if (addBtn) updatePlan(plan.id, { exerciseIds: [...plan.exerciseIds, addBtn.dataset.add] })
+      if (addBtn) {
+        // Prevent duplicate adds – the available list already excludes exercises in the plan,
+        // but this guard is a safety net.
+        if (plan.exerciseIds.includes(addBtn.dataset.add)) {
+          // Already in plan – don't add again
+          return
+        }
+        updatePlan(plan.id, { exerciseIds: [...plan.exerciseIds, addBtn.dataset.add] })
+      }
       const removeBtn = e.target.closest('[data-remove]')
       if (removeBtn) updatePlan(plan.id, { exerciseIds: plan.exerciseIds.filter((x) => x !== removeBtn.dataset.remove) })
     })
