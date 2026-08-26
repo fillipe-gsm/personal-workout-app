@@ -41,7 +41,7 @@ export class ExerciseSetBlock extends HTMLElement {
         <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
       </div>
       <form class="row">
-        <input class="input tw" type="number" step="2.5" min="0" placeholder="Training weight (kg)" />
+        <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
         <button class="btn btn-primary" type="submit">Start</button>
       </form>`
     this.querySelector('form').addEventListener('submit', (e) => {

@@ -31,7 +31,7 @@ export class PlateCalculator extends HTMLElement {
               )
               .join('')}
           </select>
-          <input class="input target" type="number" step="2.5" min="0" placeholder="Target weight (kg)" value="${esc(this.getAttribute('weight') || '')}" />
+          <input class="input target" type="number" step="1" min="0" placeholder="Target weight (kg)" value="${esc(this.getAttribute('weight') || '')}" />
         </div>
         <div class="result"></div>
       </div>`

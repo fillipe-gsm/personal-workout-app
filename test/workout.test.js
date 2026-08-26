@@ -1,0 +1,87 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+const storage = new Map()
+vi.stubGlobal('localStorage', {
+  getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+  setItem: (k, v) => storage.set(k, String(v)),
+  removeItem: (k) => storage.delete(k),
+  clear: () => storage.clear()
+})
+
+const store = await import('../src/store.js')
+await import('../src/components/workout-session.js')
+
+beforeEach(() => {
+  store.clearAllData()
+  document.body.innerHTML = ''
+  location.hash = ''
+})
+
+function createPlanWithExercise(exerciseName = 'Squat') {
+  const ex = store.addExercise(exerciseName)
+  const plan = store.addPlan('Test Plan')
+  store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+  return { ex, plan }
+}
+
+describe('workout training weight input', () => {
+  it('has step=1 so any integer weight is valid', () => {
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const twInput = document.querySelector('exercise-set-block .tw')
+    expect(twInput.step).toBe('1')
+
+    for (const val of ['77', '73', '81', '100', '1']) {
+      twInput.value = val
+      expect(twInput.validity.valid, `value ${val} should be valid with step=1`).toBe(true)
+    }
+  })
+
+  it('accepts any integer TW like 77 that would have failed with step 2.5', async () => {
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    const form = block.querySelector('form')
+    const twInput = block.querySelector('.tw')
+
+    twInput.value = '77'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(block.sets).toHaveLength(6)
+    expect(block.sets.map((s) => s.weightKg)).toEqual([
+      Math.floor(77 * 0.4),
+      Math.floor(77 * 0.6),
+      Math.floor(77 * 0.8),
+      77, 77, 77
+    ])
+
+    const rows = block.querySelectorAll('.set-row')
+    expect(rows).toHaveLength(6)
+  })
+
+  it('accepts 73 and generates correct warm-ups', async () => {
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '73'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(block.sets.slice(0, 3).map((s) => s.weightKg)).toEqual([
+      Math.floor(73 * 0.4),
+      Math.floor(73 * 0.6),
+      Math.floor(73 * 0.8)
+    ])
+  })
+})
