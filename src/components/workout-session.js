@@ -10,10 +10,15 @@ export class WorkoutSession extends HTMLElement {
       this.innerHTML = `<div class="screen"><app-header title="Plan not found" back="#/plans"></app-header></div>`
       return
     }
+    const today = new Date().toISOString().split('T')[0]
     const exercises = plan.exerciseIds.map(getExercise).filter(Boolean)
     this.innerHTML = `
       <div class="screen">
         <app-header title="Workout: ${esc(plan.name)}" back="#/plans"></app-header>
+        <div class="row" style="margin-bottom:12px">
+          <label class="muted" style="min-width:50px">Date</label>
+          <input class="input" type="date" data-workout-date value="${today}" />
+        </div>
         ${exercises.length ? '' : '<p class="empty">This plan has no exercises.</p>'}
         <div class="blocks"></div>
       </div>`
@@ -157,9 +162,16 @@ export class ExerciseSetBlock extends HTMLElement {
       alert('Enter at least one rep count before saving.')
       return
     }
+    const session = this.closest('workout-session')
+    const dateInput = session?.querySelector('[data-workout-date]')
+    let dateIso = null
+    if (dateInput?.value) {
+      dateIso = new Date(dateInput.value + 'T12:00:00').toISOString()
+    }
     addRecord({
       exerciseId: this.exercise.id,
-      sets: this.sets.map(({ type, weightKg, reps }) => ({ type, weightKg, reps: reps ?? null }))
+      sets: this.sets.map(({ type, weightKg, reps }) => ({ type, weightKg, reps: reps ?? null })),
+      ...(dateIso ? { date: dateIso } : {})
     })
     this.saved = true
     this.renderSets()
