@@ -18,7 +18,9 @@ beforeEach(() => {
 })
 
 function listNames() {
-  return [...document.querySelectorAll('.list-item > span:first-child')].map((n) => n.textContent)
+  return [...document.querySelectorAll('.list-item > span:first-child')].map((n) =>
+    (n.childNodes[0]?.textContent || n.textContent).trim()
+  )
 }
 
 async function submitNewExercise(name) {
@@ -67,5 +69,36 @@ describe('exercises screen', () => {
 
     expect(store.getData().exercises).toHaveLength(0)
     expect(listNames()).toEqual([])
+  })
+
+  it('creates Barbell exercise by default and allows changing category', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('Squat')
+    expect(store.getData().exercises[0].category).toBe('Barbell')
+    expect(document.querySelector('.badge').textContent).toBe('Barbell')
+
+    const sel = document.querySelector('[data-category]')
+    sel.value = 'Bodyweight'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+
+    expect(store.getData().exercises[0].category).toBe('Bodyweight')
+  })
+
+  it('adds exercise with selected category via form', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    const form = document.querySelector('exercise-list form')
+    form.querySelector('input').value = 'Push-up'
+    form.querySelector('select').value = 'Bodyweight'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(store.getData().exercises[0].category).toBe('Bodyweight')
+    expect(document.querySelector('.badge').textContent).toBe('Bodyweight')
+  })
+
+  it('handles Dumbbel typo as Dumbbell', async () => {
+    const ex = store.addExercise('Curl', 'Dumbbel')
+    expect(ex.category).toBe('Dumbbell')
   })
 })

@@ -13,6 +13,13 @@ export function uid() {
     : Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
+export const EXERCISE_CLASSES = ['Barbell', 'Bodyweight', 'Dumbbell', 'Machine']
+const CATEGORY_ALIASES = { Dumbbel: 'Dumbbell' }
+
+function normalizeCategory(c) {
+  return CATEGORY_ALIASES[c] || c
+}
+
 function normalize(d) {
   for (const profile of d.profiles) {
     profile.plates = (profile.plates || []).map(({ kg, count }) => ({
@@ -20,7 +27,15 @@ function normalize(d) {
       count: Number.isFinite(count) ? count : Infinity
     }))
   }
+  for (const ex of d.exercises) {
+    ex.category = normalizeCategory(ex.category)
+    if (!ex.category || !EXERCISE_CLASSES.includes(ex.category)) ex.category = 'Barbell'
+  }
   return d
+}
+
+export function isBarbell(exercise) {
+  return !exercise?.category || exercise.category === 'Barbell'
 }
 
 export function load() {
@@ -55,10 +70,23 @@ export function clearAllData() {
   save()
 }
 
-export function addExercise(name) {
-  const ex = { id: uid(), name: name.trim() }
+export function addExercise(name, category = 'Barbell') {
+  category = normalizeCategory(category)
+  if (!EXERCISE_CLASSES.includes(category)) category = 'Barbell'
+  const ex = { id: uid(), name: name.trim(), category }
   data.exercises.push(ex)
   save()
+  return ex
+}
+
+export function updateExercise(id, patch) {
+  const ex = data.exercises.find((e) => e.id === id)
+  if (ex) {
+    if (patch.category) patch.category = normalizeCategory(patch.category)
+    if (patch.category && !EXERCISE_CLASSES.includes(patch.category)) patch.category = 'Barbell'
+    Object.assign(ex, patch)
+    save()
+  }
   return ex
 }
 

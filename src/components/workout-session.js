@@ -1,4 +1,4 @@
-import { getPlan, getExercise, addRecord } from '../store.js'
+import { getPlan, getExercise, addRecord, isBarbell } from '../store.js'
 import { warmupWeights } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
@@ -42,10 +42,13 @@ export class WorkoutSession extends HTMLElement {
           (b) => b.exercise.id === exerciseId
         )
         if (block && tw) {
-          block.sets = [
-            ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
-            ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
-          ]
+          const bb = isBarbell(block.exercise)
+          block.sets = bb
+            ? [
+                ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
+                ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
+              ]
+            : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
           block.saved = false
           block.renderSets()
           this._stack.push(block)
@@ -89,10 +92,13 @@ export class ExerciseSetBlock extends HTMLElement {
       e.preventDefault()
       const tw = parseFloat(e.target.querySelector('.tw').value)
       if (!tw || tw <= 0) return
-      this.sets = [
-        ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
-        ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
-      ]
+      const bb = isBarbell(this.exercise)
+      this.sets = bb
+        ? [
+            ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
+            ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
+          ]
+        : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
       this.saved = false
       this.renderSets()
       const session = this.closest('workout-session')
@@ -104,6 +110,7 @@ export class ExerciseSetBlock extends HTMLElement {
   }
 
   renderSets() {
+    const bb = isBarbell(this.exercise)
     const rows = this.sets.map((set, i) => {
       const warmupsSoFar = this.sets.slice(0, i).filter((s) => s.type === 'warmup').length
       const label =
@@ -117,7 +124,7 @@ export class ExerciseSetBlock extends HTMLElement {
           <span class="set-label ${set.type}">${label}</span>
           <strong>${set.weightKg} kg</strong>
           <input class="input reps" data-index="${i}" type="number" min="0" placeholder="reps" value="${set.reps ?? ''}" />
-          <a class="btn btn-small" href="#/plates?weight=${set.weightKg}">Plates</a>
+          ${bb ? `<a class="btn btn-small" href="#/plates?weight=${set.weightKg}">Plates</a>` : ''}
         </div>`
     })
     this.innerHTML = `

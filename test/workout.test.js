@@ -142,4 +142,52 @@ describe('workout training weight input', () => {
     ])
     expect(block2.querySelectorAll('.set-row')).toHaveLength(6)
   })
+
+  describe('exercise classes', () => {
+    it('Barbell shows warm-ups and Plates, Bodyweight shows only working sets', async () => {
+      const barbell = store.addExercise('Squat', 'Barbell')
+      const bw = store.addExercise('Push-up', 'Bodyweight')
+      const plan = store.addPlan('Mixed')
+      store.updatePlan(plan.id, { exerciseIds: [barbell.id, bw.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const [barbellBlock, bwBlock] = [...document.querySelectorAll('exercise-set-block')]
+
+      barbellBlock.querySelector('.tw').value = '80'
+      barbellBlock.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      bwBlock.querySelector('.tw').value = '20'
+      bwBlock.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      expect(barbellBlock.sets).toHaveLength(6)
+      expect(bwBlock.sets).toHaveLength(3)
+      expect(barbellBlock.querySelector('.set-label.warmup')).not.toBeNull()
+      expect(bwBlock.querySelector('.set-label.warmup')).toBeNull()
+      expect(barbellBlock.querySelector('a[href^="#/plates"]')).not.toBeNull()
+      expect(bwBlock.querySelector('a[href^="#/plates"]')).toBeNull()
+    })
+
+    it('Dumbbell and Machine have no warm-ups or Plates', async () => {
+      const dumb = store.addExercise('Curl', 'Dumbbell')
+      const mach = store.addExercise('Leg Press', 'Machine')
+      const plan = store.addPlan('Mixed2')
+      store.updatePlan(plan.id, { exerciseIds: [dumb.id, mach.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      for (const block of document.querySelectorAll('exercise-set-block')) {
+        block.querySelector('.tw').value = '30'
+        block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+        await Promise.resolve()
+        expect(block.sets).toHaveLength(3)
+        expect(block.querySelector('.set-label.warmup')).toBeNull()
+        expect(block.querySelector('a[href^="#/plates"]')).toBeNull()
+      }
+    })
+  })
 })
