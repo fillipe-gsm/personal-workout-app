@@ -109,4 +109,46 @@ describe('calcPlates', () => {
       }
     }
   })
+
+  it('finds the optimal solution where greedy fails (26kg, bar 8kg, plates 2/3/5)', () => {
+    const profile = {
+      barbellKg: 8,
+      plates: [
+        { kg: 5, count: Infinity },
+        { kg: 3, count: Infinity },
+        { kg: 2, count: Infinity }
+      ]
+    }
+    const r = calcPlates(26, profile)
+    expect(r.perSide).toBe(9)
+    expect(r.achievable).toBe(true)
+    expect(r.leftoverPerSide).toBe(0)
+    expect(loadedWeight(r, profile)).toBe(26)
+    expect(r.plates).toEqual([
+      { kg: 5, count: 1 },
+      { kg: 2, count: 2 }
+    ])
+  })
+
+  it('is stable and prefers heaviest plates first', () => {
+    const profile = {
+      barbellKg: 8,
+      plates: [
+        { kg: 2, count: Infinity },
+        { kg: 5, count: Infinity },
+        { kg: 3, count: Infinity }
+      ]
+    }
+    const a = calcPlates(26, profile)
+    const b = calcPlates(26, {
+      barbellKg: 8,
+      plates: [
+        { kg: 3, count: Infinity },
+        { kg: 2, count: Infinity },
+        { kg: 5, count: Infinity }
+      ]
+    })
+    expect(a.plates).toEqual(b.plates)
+    expect(a.plates[0].kg).toBe(5)
+  })
 })
