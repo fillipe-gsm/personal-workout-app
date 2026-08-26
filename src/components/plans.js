@@ -57,6 +57,10 @@ export class PlanEdit extends ReactiveElement {
     return `
       <div class="screen">
         <app-header title="Edit: ${esc(plan.name)}" back="#/plans"></app-header>
+        <div class="row" style="margin-bottom:16px">
+          <input class="input" type="text" value="${esc(plan.name)}" data-plan-name style="flex:1" />
+          <button class="btn btn-primary" data-save-name>Save name</button>
+        </div>
         <div class="section-title">Exercises in this plan (tap to remove)</div>
         <ul class="list">
           ${
@@ -95,7 +99,24 @@ export class PlanEdit extends ReactiveElement {
   }
 
   bind() {
+    const saveName = () => {
+      const input = this.querySelector('[data-plan-name]')
+      const plan = getData().plans.find((p) => p.id === this.getAttribute('plan-id'))
+      if (!plan || !input) return
+      const next = input.value.trim()
+      if (!next || next === plan.name) return
+      updatePlan(plan.id, { name: next })
+    }
+    this.querySelector('[data-save-name]')?.addEventListener('click', saveName)
+    this.querySelector('[data-plan-name]')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        saveName()
+      }
+    })
+
     this.addEventListener('click', (e) => {
+      if (e.target.closest('[data-save-name]')) return
       const planId = this.getAttribute('plan-id')
       const plan = getData().plans.find((p) => p.id === planId)
       if (!plan) return
