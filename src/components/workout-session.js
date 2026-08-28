@@ -71,7 +71,7 @@ export class WorkoutSession extends HTMLElement {
       exerciseId: b.exercise.id,
       tw: b.sets.find((s) => s.type === 'working')?.weightKg
     }))
-    history.pushState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
+    history.replaceState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
   }
 }
 

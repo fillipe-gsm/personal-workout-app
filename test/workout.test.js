@@ -86,8 +86,8 @@ describe('workout training weight input', () => {
     ])
   })
 
-  it('pushes history when starting and reverts on back (popstate)', async () => {
-    const pushSpy = vi.spyOn(window.history, 'pushState')
+  it('updates history via replaceState when starting and reverts on back (popstate)', async () => {
+    const replaceSpy = vi.spyOn(window.history, 'replaceState')
     const { plan } = createPlanWithExercise()
     const session = document.createElement('workout-session')
     session.setAttribute('plan-id', plan.id)
@@ -99,7 +99,7 @@ describe('workout training weight input', () => {
     await Promise.resolve()
 
     expect(block.sets).toHaveLength(6)
-    expect(pushSpy).toHaveBeenCalled()
+    expect(replaceSpy).toHaveBeenCalled()
     expect(session._stack).toHaveLength(1)
 
     window.dispatchEvent(new PopStateEvent('popstate', { state: { workoutExercise: block.exercise.id } }))
@@ -108,6 +108,26 @@ describe('workout training weight input', () => {
     expect(block.sets).toHaveLength(0)
     expect(block.querySelector('form')).not.toBeNull()
     expect(block.querySelector('.tw')).not.toBeNull()
+  })
+
+  it('starting multiple exercises does not add extra history entries', async () => {
+    const pushSpy = vi.spyOn(window.history, 'pushState')
+    const replaceSpy = vi.spyOn(window.history, 'replaceState')
+    const exs = Array.from({ length: 5 }, (_, i) => store.addExercise(`Ex${i}`))
+    const plan = store.addPlan('Many')
+    store.updatePlan(plan.id, { exerciseIds: exs.map((e) => e.id) })
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    for (const block of document.querySelectorAll('exercise-set-block')) {
+      block.querySelector('.tw').value = '50'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    }
+
+    expect(replaceSpy).toHaveBeenCalled()
+    expect(pushSpy).not.toHaveBeenCalledWith(expect.objectContaining({ workoutPlanId: plan.id }), expect.anything(), expect.anything())
   })
 
   it('restores started exercise when navigating back from plates', async () => {
