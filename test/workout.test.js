@@ -195,6 +195,64 @@ describe('workout training weight input', () => {
     expect(block2.sets[0].reps).toBe(8)
   })
 
+  it('saving same exercise same day updates existing record with confirmation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { plan, ex } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const dateInput = document.querySelector('[data-workout-date]')
+    dateInput.value = '2024-01-15'
+    dateInput.dispatchEvent(new Event('change', { bubbles: true }))
+
+    let block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    block.querySelector('.reps').value = '5'
+    block.querySelector('.reps').dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+    block.querySelector('[data-save]').click()
+    await Promise.resolve()
+
+    expect(store.getRecordsForExercise(ex.id)).toHaveLength(1)
+    expect(store.getRecordsForExercise(ex.id)[0].sets[0].reps).toBe(5)
+
+    document.body.innerHTML = ''
+    history.replaceState(null, '', location.href)
+    const session2 = document.createElement('workout-session')
+    session2.setAttribute('plan-id', plan.id)
+    document.body.append(session2)
+    await Promise.resolve()
+    const dateInput2 = document.querySelector('[data-workout-date]')
+    dateInput2.value = '2024-01-15'
+    const block2 = document.querySelector('exercise-set-block')
+    block2.querySelector('.tw').value = '90'
+    block2.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    block2.querySelector('.reps').value = '6'
+    block2.querySelector('.reps').dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+    block2.querySelector('[data-save]').click()
+    await Promise.resolve()
+
+    expect(confirmSpy).toHaveBeenCalledWith('There is a record for this exercise in this day already. Update it?')
+    expect(store.getRecordsForExercise(ex.id)).toHaveLength(1)
+    const updated = store.getRecordsForExercise(ex.id)[0]
+    expect(updated.sets.find((s) => s.type === 'working').weightKg).toBe(90)
+    expect(updated.sets[0].reps).toBe(6)
+
+    confirmSpy.mockReturnValue(false)
+    block2.querySelector('.reps').value = '10'
+    block2.querySelector('.reps').dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+    block2.querySelector('[data-save]').click()
+    await Promise.resolve()
+    expect(store.getRecordsForExercise(ex.id)).toHaveLength(1)
+    expect(store.getRecordsForExercise(ex.id)[0].sets[0].reps).toBe(6)
+  })
+
   it('Conclude workout clears state and navigates to root', async () => {
     const { plan } = createPlanWithExercise()
     const session = document.createElement('workout-session')

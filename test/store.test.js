@@ -113,4 +113,24 @@ describe('records', () => {
     store.addRecord({ exerciseId: ex2.id, sets: [] })
     expect(store.getRecordsForExercise(ex1.id)).toHaveLength(1)
   })
+
+  it('finds record on same calendar day', () => {
+    const ex = store.addExercise('Squat')
+    const date = new Date('2024-01-15T12:00:00.000Z').toISOString()
+    store.addRecord({ exerciseId: ex.id, sets: [{ type: 'working', weightKg: 80, reps: 5 }], date })
+    expect(store.findRecordForExerciseOnDate(ex.id, date)).toBeDefined()
+    expect(store.findRecordForExerciseOnDate(ex.id, new Date('2024-01-15T18:00:00.000Z').toISOString())).toBeDefined()
+    expect(store.findRecordForExerciseOnDate(ex.id, new Date('2024-01-16T12:00:00.000Z').toISOString())).toBeUndefined()
+  })
+
+  it('updates existing record instead of stacking', () => {
+    const ex = store.addExercise('Squat')
+    const date = new Date('2024-01-15T12:00:00.000Z').toISOString()
+    const rec = store.addRecord({ exerciseId: ex.id, sets: [{ type: 'working', weightKg: 80, reps: 5 }], date })
+    store.updateRecord(rec.id, { sets: [{ type: 'working', weightKg: 90, reps: 6 }], date })
+    const recs = store.getRecordsForExercise(ex.id)
+    expect(recs).toHaveLength(1)
+    expect(recs[0].id).toBe(rec.id)
+    expect(recs[0].sets[0].weightKg).toBe(90)
+  })
 })

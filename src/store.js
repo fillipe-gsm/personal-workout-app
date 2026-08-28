@@ -155,6 +155,22 @@ export function addRecord(record) {
   return rec
 }
 
+export function findRecordForExerciseOnDate(exerciseId, dateIso) {
+  const targetDay = new Date(dateIso).toISOString().split('T')[0]
+  return data.records.find(
+    (r) => r.exerciseId === exerciseId && new Date(r.date).toISOString().split('T')[0] === targetDay
+  )
+}
+
+export function updateRecord(id, patch) {
+  const rec = data.records.find((r) => r.id === id)
+  if (rec) {
+    Object.assign(rec, patch)
+    save()
+  }
+  return rec
+}
+
 export function getRecordsForExercise(exerciseId) {
   return data.records
     .filter((r) => r.exerciseId === exerciseId)

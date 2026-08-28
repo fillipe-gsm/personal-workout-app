@@ -1,4 +1,4 @@
-import { getPlan, getExercise, addRecord, isBarbell } from '../store.js'
+import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell } from '../store.js'
 import { warmupWeights } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
@@ -181,11 +181,19 @@ export class ExerciseSetBlock extends HTMLElement {
     if (dateInput?.value) {
       dateIso = new Date(dateInput.value + 'T12:00:00').toISOString()
     }
-    addRecord({
-      exerciseId: this.exercise.id,
-      sets: this.sets.map(({ type, weightKg, reps }) => ({ type, weightKg, reps: reps ?? null })),
-      ...(dateIso ? { date: dateIso } : {})
-    })
+    const dateForCheck = dateIso || new Date().toISOString()
+    const existing = findRecordForExerciseOnDate(this.exercise.id, dateForCheck)
+    const setsPayload = this.sets.map(({ type, weightKg, reps }) => ({ type, weightKg, reps: reps ?? null }))
+    if (existing) {
+      if (!confirm('There is a record for this exercise in this day already. Update it?')) return
+      updateRecord(existing.id, { sets: setsPayload, date: dateForCheck })
+    } else {
+      addRecord({
+        exerciseId: this.exercise.id,
+        sets: setsPayload,
+        ...(dateIso ? { date: dateIso } : {})
+      })
+    }
     this.saved = true
     this.renderSets()
   }
