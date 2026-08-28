@@ -68,10 +68,16 @@ export class PlanEdit extends ReactiveElement {
               ? plan.exerciseIds
                   .map((id, idx) => {
                     const ex = getExercise(id)
+                    const isFirst = idx === 0
+                    const isLast = idx === plan.exerciseIds.length - 1
                     return `
                       <li class="list-item">
                         <span>${idx + 1}. ${esc(ex ? ex.name : '?')}</span>
-                        <button class="btn btn-danger" data-remove="${id}">Remove</button>
+                        <span>
+                          <button class="btn btn-small" data-move-up="${id}" ${isFirst ? 'disabled' : ''} title="Move up">▲</button>
+                          <button class="btn btn-small" data-move-down="${id}" ${isLast ? 'disabled' : ''} title="Move down">▼</button>
+                          <button class="btn btn-danger" data-remove="${id}">Remove</button>
+                        </span>
                       </li>`
                   })
                   .join('')
@@ -132,6 +138,24 @@ export class PlanEdit extends ReactiveElement {
       }
       const removeBtn = e.target.closest('[data-remove]')
       if (removeBtn) updatePlan(plan.id, { exerciseIds: plan.exerciseIds.filter((x) => x !== removeBtn.dataset.remove) })
+      const upBtn = e.target.closest('[data-move-up]')
+      if (upBtn && !upBtn.disabled) {
+        const idx = plan.exerciseIds.indexOf(upBtn.dataset.moveUp)
+        if (idx > 0) {
+          const next = [...plan.exerciseIds]
+          ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+          updatePlan(plan.id, { exerciseIds: next })
+        }
+      }
+      const downBtn = e.target.closest('[data-move-down]')
+      if (downBtn && !downBtn.disabled) {
+        const idx = plan.exerciseIds.indexOf(downBtn.dataset.moveDown)
+        if (idx !== -1 && idx < plan.exerciseIds.length - 1) {
+          const next = [...plan.exerciseIds]
+          ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+          updatePlan(plan.id, { exerciseIds: next })
+        }
+      }
     })
   }
 }
