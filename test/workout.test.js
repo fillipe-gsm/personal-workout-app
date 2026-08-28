@@ -274,6 +274,43 @@ describe('workout training weight input', () => {
     expect(location.hash).toBe('#/')
   })
 
+  it('persists note via history and saves it with record', async () => {
+    const { plan, ex } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    block.querySelector('[data-note]').value = 'This was hard'
+    block.querySelector('[data-note]').dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+    block.querySelector('.reps').value = '5'
+    block.querySelector('.reps').dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+
+    expect(history.state?.started[0].note).toBe('This was hard')
+
+    document.body.innerHTML = ''
+    await Promise.resolve()
+    const session2 = document.createElement('workout-session')
+    session2.setAttribute('plan-id', plan.id)
+    document.body.append(session2)
+    await Promise.resolve()
+
+    const block2 = document.querySelector('exercise-set-block')
+    expect(block2.querySelector('[data-note]').value).toBe('This was hard')
+
+    block2.querySelector('[data-save]').click()
+    await Promise.resolve()
+
+    const rec = store.getRecordsForExercise(ex.id)[0]
+    expect(rec.note).toBe('This was hard')
+  })
+
   describe('exercise classes', () => {
     it('Barbell shows warm-ups and Plates, Bodyweight shows only working sets', async () => {
       const barbell = store.addExercise('Squat', 'Barbell')

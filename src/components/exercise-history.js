@@ -32,6 +32,7 @@ export class ExerciseHistory extends ReactiveElement {
                           )
                           .join('')}
                       </ul>
+                      ${rec.note ? `<p class="muted" style="margin-top:8px; white-space:pre-wrap; font-style:italic">Note: ${esc(rec.note)}</p>` : ''}
                     </div>`
                 })
                 .join('')

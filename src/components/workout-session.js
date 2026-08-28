@@ -35,6 +35,7 @@ export class WorkoutSession extends HTMLElement {
       const block = this._stack.pop()
       if (block && block.sets.length) {
         block.sets = []
+        block.note = ''
         block.saved = false
         block.renderInput()
       }
@@ -56,6 +57,7 @@ export class WorkoutSession extends HTMLElement {
         if (!block) continue
         if (Array.isArray(entry.sets) && entry.sets.length) {
           block.sets = entry.sets.map((s) => ({ ...s }))
+          block.note = entry.note || ''
         } else if (entry.tw) {
           const bb = isBarbell(block.exercise)
           const tw = entry.tw
@@ -65,6 +67,7 @@ export class WorkoutSession extends HTMLElement {
                 ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
               ]
             : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
+          block.note = entry.note || ''
         } else continue
         block.saved = false
         block.renderSets()
@@ -80,7 +83,8 @@ export class WorkoutSession extends HTMLElement {
   _pushHistory() {
     const started = this._stack.map((b) => ({
       exerciseId: b.exercise.id,
-      sets: b.sets.map((s) => ({ ...s }))
+      sets: b.sets.map((s) => ({ ...s })),
+      note: b.note || ''
     }))
     history.replaceState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
   }
@@ -89,6 +93,7 @@ export class WorkoutSession extends HTMLElement {
 export class ExerciseSetBlock extends HTMLElement {
   connectedCallback() {
     this.sets = []
+    this.note = ''
     this.saved = false
     this.renderInput()
   }
@@ -122,6 +127,7 @@ export class ExerciseSetBlock extends HTMLElement {
         session._stack.push(this)
         session._pushHistory()
       }
+      this.note = ''
     })
   }
 
@@ -147,7 +153,8 @@ export class ExerciseSetBlock extends HTMLElement {
       <div class="card-title">${esc(this.exercise.name)}</div>
       ${rows.join('')}
       <div class="row"><button class="btn" data-extra>+ Extra working set</button></div>
-      <div class="row"><button class="btn btn-start big" data-save>Save exercise</button></div>
+      <textarea class="input" data-note placeholder="Add a note... (e.g. This was hard)" rows="2" style="width:100%; margin-top:8px; resize:vertical">${esc(this.note || '')}</textarea>
+      <div class="row" style="margin-top:8px"><button class="btn btn-start big" data-save>Save exercise</button></div>
       ${this.saved ? '<p class="saved-note">✓ Saved</p>' : ''}`
 
     this.querySelectorAll('.reps').forEach((input) =>
@@ -157,6 +164,10 @@ export class ExerciseSetBlock extends HTMLElement {
         this.closest('workout-session')?._pushHistory()
       })
     )
+    this.querySelector('[data-note]')?.addEventListener('input', (e) => {
+      this.note = e.target.value
+      this.closest('workout-session')?._pushHistory()
+    })
     this.querySelector('[data-extra]').addEventListener('click', () => {
       this.sets.push({ type: 'extra', weightKg: this.workingWeight() })
       this.renderSets()
@@ -184,13 +195,15 @@ export class ExerciseSetBlock extends HTMLElement {
     const dateForCheck = dateIso || new Date().toISOString()
     const existing = findRecordForExerciseOnDate(this.exercise.id, dateForCheck)
     const setsPayload = this.sets.map(({ type, weightKg, reps }) => ({ type, weightKg, reps: reps ?? null }))
+    const notePayload = (this.note || '').trim()
     if (existing) {
       if (!confirm('There is a record for this exercise in this day already. Update it?')) return
-      updateRecord(existing.id, { sets: setsPayload, date: dateForCheck })
+      updateRecord(existing.id, { sets: setsPayload, note: notePayload, date: dateForCheck })
     } else {
       addRecord({
         exerciseId: this.exercise.id,
         sets: setsPayload,
+        note: notePayload,
         ...(dateIso ? { date: dateIso } : {})
       })
     }
