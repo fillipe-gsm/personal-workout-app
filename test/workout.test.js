@@ -311,51 +311,95 @@ describe('workout training weight input', () => {
     expect(rec.note).toBe('This was hard')
   })
 
-  describe('exercise classes', () => {
-    it('Barbell shows warm-ups and Plates, Bodyweight shows only working sets', async () => {
-      const barbell = store.addExercise('Squat', 'Barbell')
-      const bw = store.addExercise('Push-up', 'Bodyweight')
+  describe('exercise classes and tiers', () => {
+    it('main always has warm-ups (regardless of category), accessory has none', async () => {
+      const mainBarbell = store.addExercise('Squat', 'Barbell', 'main')
+      const mainBW = store.addExercise('Push-up', 'Bodyweight', 'main')
       const plan = store.addPlan('Mixed')
-      store.updatePlan(plan.id, { exerciseIds: [barbell.id, bw.id] })
+      store.updatePlan(plan.id, { exerciseIds: [mainBarbell.id, mainBW.id] })
       const session = document.createElement('workout-session')
       session.setAttribute('plan-id', plan.id)
       document.body.append(session)
 
       const [barbellBlock, bwBlock] = [...document.querySelectorAll('exercise-set-block')]
-
       barbellBlock.querySelector('.tw').value = '80'
       barbellBlock.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
       await Promise.resolve()
-
       bwBlock.querySelector('.tw').value = '20'
       bwBlock.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
       await Promise.resolve()
 
       expect(barbellBlock.sets).toHaveLength(6)
-      expect(bwBlock.sets).toHaveLength(3)
+      expect(bwBlock.sets).toHaveLength(6)
       expect(barbellBlock.querySelector('.set-label.warmup')).not.toBeNull()
-      expect(bwBlock.querySelector('.set-label.warmup')).toBeNull()
-      expect(barbellBlock.querySelector('a[href^="#/plates"]')).not.toBeNull()
-      expect(bwBlock.querySelector('a[href^="#/plates"]')).toBeNull()
+      expect(bwBlock.querySelector('.set-label.warmup')).not.toBeNull()
     })
 
-    it('Dumbbell and Machine have no warm-ups or Plates', async () => {
-      const dumb = store.addExercise('Curl', 'Dumbbell')
-      const mach = store.addExercise('Leg Press', 'Machine')
-      const plan = store.addPlan('Mixed2')
-      store.updatePlan(plan.id, { exerciseIds: [dumb.id, mach.id] })
+    it('Plates still only for Barbell, regardless of tier', async () => {
+      const barbellMain = store.addExercise('Squat', 'Barbell', 'main')
+      const accBarbell = store.addExercise('Acc Barbell', 'Barbell', 'accessory')
+      const accBW = store.addExercise('Push-up', 'Bodyweight', 'accessory')
+      const plan = store.addPlan('PlatesCheck')
+      store.updatePlan(plan.id, { exerciseIds: [barbellMain.id, accBarbell.id, accBW.id] })
       const session = document.createElement('workout-session')
       session.setAttribute('plan-id', plan.id)
       document.body.append(session)
 
-      for (const block of document.querySelectorAll('exercise-set-block')) {
-        block.querySelector('.tw').value = '30'
-        block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-        await Promise.resolve()
-        expect(block.sets).toHaveLength(3)
-        expect(block.querySelector('.set-label.warmup')).toBeNull()
-        expect(block.querySelector('a[href^="#/plates"]')).toBeNull()
-      }
+      const [b1, b2, b3] = [...document.querySelectorAll('exercise-set-block')]
+      b1.querySelector('.tw').value = '80'
+      b1.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      b2.querySelector('.tw').value = '40'
+      b2.querySelector('.total').value = '30'
+      b2.querySelector('.perSet').value = '10'
+      b2.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      b3.querySelector('.tw').value = '20'
+      b3.querySelector('.total').value = '30'
+      b3.querySelector('.perSet').value = '10'
+      b3.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      expect(b1.querySelector('a[href^="#/plates"]')).not.toBeNull()
+      expect(b2.querySelector('a[href^="#/plates"]')).not.toBeNull()
+      expect(b3.querySelector('a[href^="#/plates"]')).toBeNull()
+    })
+
+    it('accessory generates sets from total/perSet', async () => {
+      const acc = store.addExercise('Curl', 'Dumbbell', 'accessory')
+      const plan = store.addPlan('AccPlan')
+      store.updatePlan(plan.id, { exerciseIds: [acc.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      block.querySelector('.tw').value = '20'
+      block.querySelector('.total').value = '45'
+      block.querySelector('.perSet').value = '5'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      expect(block.sets).toHaveLength(9)
+      expect(block.sets.every((s) => s.type === 'working')).toBe(true)
+      expect(block.sets.every((s) => s.weightKg === 20)).toBe(true)
+      expect(block.sets.every((s) => s.reps === 5)).toBe(true)
+
+      document.body.innerHTML = ''
+      history.replaceState(null, '', location.href)
+      const acc2 = store.addExercise('Curl2', 'Dumbbell', 'accessory')
+      const plan2 = store.addPlan('AccPlan2')
+      store.updatePlan(plan2.id, { exerciseIds: [acc2.id] })
+      const session2 = document.createElement('workout-session')
+      session2.setAttribute('plan-id', plan2.id)
+      document.body.append(session2)
+      const block2 = document.querySelector('exercise-set-block')
+      block2.querySelector('.tw').value = '20'
+      block2.querySelector('.total').value = '45'
+      block2.querySelector('.perSet').value = '15'
+      block2.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      expect(block2.sets).toHaveLength(3)
+      expect(block2.sets.every((s) => s.reps === 15)).toBe(true)
     })
   })
 })

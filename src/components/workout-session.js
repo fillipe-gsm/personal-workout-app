@@ -1,4 +1,4 @@
-import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell } from '../store.js'
+import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isMain } from '../store.js'
 import { warmupWeights } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
@@ -59,9 +59,9 @@ export class WorkoutSession extends HTMLElement {
           block.sets = entry.sets.map((s) => ({ ...s }))
           block.note = entry.note || ''
         } else if (entry.tw) {
-          const bb = isBarbell(block.exercise)
           const tw = entry.tw
-          block.sets = bb
+          const isMainEx = isMain(block.exercise)
+          block.sets = isMainEx
             ? [
                 ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
                 ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
@@ -100,35 +100,67 @@ export class ExerciseSetBlock extends HTMLElement {
 
   renderInput() {
     this.className = 'card'
-    this.innerHTML = `
-      <div class="card-title">
-        ${esc(this.exercise.name)}
-        <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
-      </div>
-      <form class="row">
-        <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
-        <button class="btn btn-primary" type="submit">Start</button>
-      </form>`
-    this.querySelector('form').addEventListener('submit', (e) => {
-      e.preventDefault()
-      const tw = parseFloat(e.target.querySelector('.tw').value)
-      if (!tw || tw <= 0) return
-      const bb = isBarbell(this.exercise)
-      this.sets = bb
-        ? [
-            ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
-            ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
-          ]
-        : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
-      this.saved = false
-      this.renderSets()
-      const session = this.closest('workout-session')
-      if (session?._stack) {
-        session._stack.push(this)
-        session._pushHistory()
-      }
-      this.note = ''
-    })
+    const isMainEx = isMain(this.exercise)
+    const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
+    if (isMainEx) {
+      this.innerHTML = `
+        <div class="card-title">
+          ${esc(this.exercise.name)} ${tierBadge}
+          <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+        </div>
+        <form class="row">
+          <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
+          <button class="btn btn-primary" type="submit">Start</button>
+        </form>`
+      this.querySelector('form').addEventListener('submit', (e) => {
+        e.preventDefault()
+        const tw = parseFloat(e.target.querySelector('.tw').value)
+        if (!tw || tw <= 0) return
+        this.sets = [
+          ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
+          ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
+        ]
+        this.note = ''
+        this.saved = false
+        this.renderSets()
+        const session = this.closest('workout-session')
+        if (session?._stack) {
+          session._stack.push(this)
+          session._pushHistory()
+        }
+      })
+    } else {
+      this.innerHTML = `
+        <div class="card-title">
+          ${esc(this.exercise.name)} ${tierBadge}
+          <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+        </div>
+        <form class="col" style="gap:8px">
+          <div class="row">
+            <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
+            <input class="input total" type="number" step="1" min="1" placeholder="Total reps" />
+            <input class="input perSet" type="number" step="1" min="1" placeholder="Reps / set" />
+          </div>
+          <button class="btn btn-primary" type="submit">Start</button>
+        </form>`
+      this.querySelector('form').addEventListener('submit', (e) => {
+        e.preventDefault()
+        const tw = parseFloat(e.target.querySelector('.tw').value)
+        const total = parseInt(e.target.querySelector('.total').value, 10)
+        const perSet = parseInt(e.target.querySelector('.perSet').value, 10)
+        if (!tw || tw <= 0 || !total || total <= 0 || !perSet || perSet <= 0) return
+        const count = Math.max(1, Math.floor(total / perSet))
+        this.sets = Array.from({ length: count }, () => ({ type: 'working', weightKg: tw, reps: perSet }))
+        this.note = ''
+        this.saved = false
+        this.renderSets()
+        const session = this.closest('workout-session')
+        if (session?._stack) {
+          session._stack.push(this)
+          session._pushHistory()
+        }
+      })
+    }
   }
 
   renderSets() {

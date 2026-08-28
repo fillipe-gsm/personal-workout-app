@@ -20,6 +20,12 @@ function normalizeCategory(c) {
   return CATEGORY_ALIASES[c] || c
 }
 
+export const EXERCISE_TIERS = ['main', 'accessory']
+
+function normalizeTier(t) {
+  return t === 'accessory' ? 'accessory' : 'main'
+}
+
 function normalize(d) {
   for (const profile of d.profiles) {
     profile.plates = (profile.plates || []).map(({ kg, count }) => ({
@@ -30,12 +36,17 @@ function normalize(d) {
   for (const ex of d.exercises) {
     ex.category = normalizeCategory(ex.category)
     if (!ex.category || !EXERCISE_CLASSES.includes(ex.category)) ex.category = 'Barbell'
+    ex.tier = normalizeTier(ex.tier)
   }
   return d
 }
 
 export function isBarbell(exercise) {
   return !exercise?.category || exercise.category === 'Barbell'
+}
+
+export function isMain(exercise) {
+  return normalizeTier(exercise?.tier) === 'main'
 }
 
 export function load() {
@@ -70,10 +81,11 @@ export function clearAllData() {
   save()
 }
 
-export function addExercise(name, category = 'Barbell') {
+export function addExercise(name, category = 'Barbell', tier = 'main') {
   category = normalizeCategory(category)
   if (!EXERCISE_CLASSES.includes(category)) category = 'Barbell'
-  const ex = { id: uid(), name: name.trim(), category }
+  tier = normalizeTier(tier)
+  const ex = { id: uid(), name: name.trim(), category, tier }
   data.exercises.push(ex)
   save()
   return ex
@@ -84,6 +96,7 @@ export function updateExercise(id, patch) {
   if (ex) {
     if (patch.category) patch.category = normalizeCategory(patch.category)
     if (patch.category && !EXERCISE_CLASSES.includes(patch.category)) patch.category = 'Barbell'
+    if (patch.tier) patch.tier = normalizeTier(patch.tier)
     Object.assign(ex, patch)
     save()
   }
