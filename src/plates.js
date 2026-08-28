@@ -48,10 +48,12 @@ export function calcPlates(targetKg, profile) {
 
   for (let idx = 0; idx < sorted.length; idx++) {
     const plate = sorted[idx]
+    const perSideAvail =
+      plate.count === Infinity ? Infinity : Math.floor(plate.count / 2)
     const maxCount =
-      plate.count === Infinity
+      perSideAvail === Infinity
         ? Math.floor(targetScaled / plate.scaled)
-        : Math.min(plate.count, Math.floor(targetScaled / plate.scaled))
+        : Math.min(perSideAvail, Math.floor(targetScaled / plate.scaled))
     for (let c = 0; c < maxCount; c++) {
       for (let s = targetScaled - plate.scaled; s >= 0; s--) {
         if (dp[s] === null) continue

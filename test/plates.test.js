@@ -72,11 +72,24 @@ describe('calcPlates', () => {
   })
 
   it('respects limited plate quantities and degrades gracefully', () => {
-    const profile = { barbellKg: 20, plates: [{ kg: 10, count: 1 }] }
+    const profile = { barbellKg: 20, plates: [{ kg: 10, count: 2 }] }
     const r = calcPlates(60, profile)
     expect(r.achievable).toBe(false)
     expect(r.plates).toEqual([{ kg: 10, count: 1 }])
     expect(r.leftoverPerSide).toBe(10)
+  })
+
+  it('counts plates as total, not per side (2 total = 1 per side max)', () => {
+    const p = { barbellKg: 20, plates: [{ kg: 20, count: 2 }] }
+    expect(calcPlates(60, p).achievable).toBe(true)
+    expect(calcPlates(60, p).plates).toEqual([{ kg: 20, count: 1 }])
+    const r = calcPlates(100, p)
+    expect(r.achievable).toBe(false)
+    expect(r.plates).toEqual([{ kg: 20, count: 1 }])
+    expect(r.leftoverPerSide).toBe(20)
+    const r3 = calcPlates(60, { barbellKg: 20, plates: [{ kg: 10, count: 1 }] })
+    expect(r3.plates).toEqual([])
+    expect(r3.leftoverPerSide).toBe(20)
   })
 
   it('reports nothing needed when target equals the bar', () => {
