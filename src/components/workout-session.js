@@ -21,6 +21,7 @@ export class WorkoutSession extends HTMLElement {
         </div>
         ${exercises.length ? '' : '<p class="empty">This plan has no exercises.</p>'}
         <div class="blocks"></div>
+        <button class="btn btn-start big" data-conclude style="margin-top:16px; width:100%">Conclude workout</button>
       </div>`
     const blocks = this.querySelector('.blocks')
     for (const exercise of exercises) {
@@ -40,24 +41,34 @@ export class WorkoutSession extends HTMLElement {
     }
     window.addEventListener('popstate', this._onPopState)
 
+    this.querySelector('[data-conclude]')?.addEventListener('click', () => {
+      this._stack = []
+      history.replaceState(null, '', location.href)
+      location.hash = '#/'
+    })
+
     const st = history.state
     if (st?.workoutPlanId === plan.id && Array.isArray(st.started)) {
-      for (const { exerciseId, tw } of st.started) {
+      for (const entry of st.started) {
         const block = [...this.querySelectorAll('exercise-set-block')].find(
-          (b) => b.exercise.id === exerciseId
+          (b) => b.exercise.id === entry.exerciseId
         )
-        if (block && tw) {
+        if (!block) continue
+        if (Array.isArray(entry.sets) && entry.sets.length) {
+          block.sets = entry.sets.map((s) => ({ ...s }))
+        } else if (entry.tw) {
           const bb = isBarbell(block.exercise)
+          const tw = entry.tw
           block.sets = bb
             ? [
                 ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
                 ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
               ]
             : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
-          block.saved = false
-          block.renderSets()
-          this._stack.push(block)
-        }
+        } else continue
+        block.saved = false
+        block.renderSets()
+        this._stack.push(block)
       }
     }
   }
@@ -69,7 +80,7 @@ export class WorkoutSession extends HTMLElement {
   _pushHistory() {
     const started = this._stack.map((b) => ({
       exerciseId: b.exercise.id,
-      tw: b.sets.find((s) => s.type === 'working')?.weightKg
+      sets: b.sets.map((s) => ({ ...s }))
     }))
     history.replaceState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
   }
@@ -143,11 +154,13 @@ export class ExerciseSetBlock extends HTMLElement {
       input.addEventListener('input', () => {
         const set = this.sets[Number(input.dataset.index)]
         set.reps = input.value === '' ? null : parseInt(input.value, 10)
+        this.closest('workout-session')?._pushHistory()
       })
     )
     this.querySelector('[data-extra]').addEventListener('click', () => {
       this.sets.push({ type: 'extra', weightKg: this.workingWeight() })
       this.renderSets()
+      this.closest('workout-session')?._pushHistory()
     })
     this.querySelector('[data-save]').addEventListener('click', () => this.save())
   }

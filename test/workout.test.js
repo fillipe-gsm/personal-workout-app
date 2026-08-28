@@ -142,7 +142,8 @@ describe('workout training weight input', () => {
     await Promise.resolve()
 
     expect(block.sets).toHaveLength(6)
-    expect(history.state?.started).toEqual([{ exerciseId: ex.id, tw: 77 }])
+    expect(history.state?.started[0].exerciseId).toBe(ex.id)
+    expect(history.state?.started[0].sets).toHaveLength(6)
 
     document.body.innerHTML = ''
     await Promise.resolve()
@@ -161,6 +162,58 @@ describe('workout training weight input', () => {
       77, 77, 77
     ])
     expect(block2.querySelectorAll('.set-row')).toHaveLength(6)
+  })
+
+  it('persists reps when going to plates and back', async () => {
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    const firstInput = block.querySelector('.reps')
+    firstInput.value = '8'
+    firstInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+
+    expect(history.state?.started[0].sets[0].reps).toBe(8)
+
+    document.body.innerHTML = ''
+    await Promise.resolve()
+
+    const session2 = document.createElement('workout-session')
+    session2.setAttribute('plan-id', plan.id)
+    document.body.append(session2)
+    await Promise.resolve()
+
+    const block2 = document.querySelector('exercise-set-block')
+    expect(block2.querySelector('.reps').value).toBe('8')
+    expect(block2.sets[0].reps).toBe(8)
+  })
+
+  it('Conclude workout clears state and navigates to root', async () => {
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(history.state?.started).toBeDefined()
+    const conclude = document.querySelector('[data-conclude]')
+    expect(conclude).not.toBeNull()
+    conclude.click()
+    await Promise.resolve()
+
+    expect(history.state?.started).toBeUndefined()
+    expect(location.hash).toBe('#/')
   })
 
   describe('exercise classes', () => {
