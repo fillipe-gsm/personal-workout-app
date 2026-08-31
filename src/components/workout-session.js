@@ -36,6 +36,7 @@ export class WorkoutSession extends HTMLElement {
       if (block && block.sets.length) {
         block.sets = []
         block.note = ''
+        block.collapsed = false
         block.saved = false
         block.renderInput()
       }
@@ -58,6 +59,7 @@ export class WorkoutSession extends HTMLElement {
         if (Array.isArray(entry.sets) && entry.sets.length) {
           block.sets = entry.sets.map((s) => ({ ...s }))
           block.note = entry.note || ''
+          block.collapsed = !!entry.collapsed
         } else if (entry.tw) {
           const tw = entry.tw
           const isMainEx = isMain(block.exercise)
@@ -68,6 +70,7 @@ export class WorkoutSession extends HTMLElement {
               ]
             : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
           block.note = entry.note || ''
+          block.collapsed = !!entry.collapsed
         } else continue
         block.saved = false
         block.renderSets()
@@ -84,7 +87,8 @@ export class WorkoutSession extends HTMLElement {
     const started = this._stack.map((b) => ({
       exerciseId: b.exercise.id,
       sets: b.sets.map((s) => ({ ...s })),
-      note: b.note || ''
+      note: b.note || '',
+      collapsed: !!b.collapsed
     }))
     history.replaceState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
   }
@@ -94,24 +98,49 @@ export class ExerciseSetBlock extends HTMLElement {
   connectedCallback() {
     this.sets = []
     this.note = ''
+    this.collapsed = false
     this.saved = false
     this.renderInput()
   }
 
+  toggleCollapse() {
+    this.collapsed = !this.collapsed
+    if (this.sets.length) this.renderSets()
+    else this.renderInput()
+    this.closest('workout-session')?._pushHistory()
+  }
+
   renderInput() {
     this.className = 'card'
+    if (this.collapsed) {
+      const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
+      this.innerHTML = `
+        <div class="card-title">
+          <span>${esc(this.exercise.name)} ${tierBadge} <small class="muted">(collapsed)</small></span>
+          <span>
+            <button class="btn btn-small" data-collapse>▼</button>
+            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+          </span>
+        </div>`
+      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
+      return
+    }
     const isMainEx = isMain(this.exercise)
     const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
     if (isMainEx) {
       this.innerHTML = `
         <div class="card-title">
-          ${esc(this.exercise.name)} ${tierBadge}
-          <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+          <span>${esc(this.exercise.name)} ${tierBadge}</span>
+          <span>
+            <button class="btn btn-small" data-collapse>▲</button>
+            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+          </span>
         </div>
         <form class="row">
           <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
+      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
       this.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault()
         const tw = parseFloat(e.target.querySelector('.tw').value)
@@ -132,8 +161,11 @@ export class ExerciseSetBlock extends HTMLElement {
     } else {
       this.innerHTML = `
         <div class="card-title">
-          ${esc(this.exercise.name)} ${tierBadge}
-          <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+          <span>${esc(this.exercise.name)} ${tierBadge}</span>
+          <span>
+            <button class="btn btn-small" data-collapse>▲</button>
+            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+          </span>
         </div>
         <form class="col" style="gap:8px">
           <div class="row">
@@ -143,6 +175,7 @@ export class ExerciseSetBlock extends HTMLElement {
           </div>
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
+      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
       this.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault()
         const tw = parseFloat(e.target.querySelector('.tw').value)
@@ -164,6 +197,20 @@ export class ExerciseSetBlock extends HTMLElement {
   }
 
   renderSets() {
+    if (this.collapsed) {
+      const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
+      const summary = `${this.sets.length} sets${this.sets[0] ? `, ${this.sets.find((s) => s.type === 'working')?.weightKg ?? this.sets[0].weightKg}kg` : ''}${this.saved ? ' ✓' : ''}`
+      this.innerHTML = `
+        <div class="card-title">
+          <span>${esc(this.exercise.name)} ${tierBadge} <small class="muted">${summary}</small></span>
+          <span>
+            <button class="btn btn-small" data-collapse>▼</button>
+            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+          </span>
+        </div>`
+      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
+      return
+    }
     const bb = isBarbell(this.exercise)
     const rows = this.sets.map((set, i) => {
       const warmupsSoFar = this.sets.slice(0, i).filter((s) => s.type === 'warmup').length
@@ -181,14 +228,22 @@ export class ExerciseSetBlock extends HTMLElement {
           ${bb ? `<a class="btn btn-small" href="#/plates?weight=${set.weightKg}">Plates</a>` : ''}
         </div>`
     })
+    const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
     this.innerHTML = `
-      <div class="card-title">${esc(this.exercise.name)}</div>
+      <div class="card-title">
+        <span>${esc(this.exercise.name)} ${tierBadge}</span>
+        <span>
+          <button class="btn btn-small" data-collapse>▲</button>
+          <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
+        </span>
+      </div>
       ${rows.join('')}
       <div class="row"><button class="btn" data-extra>+ Extra working set</button></div>
       <textarea class="input" data-note placeholder="Add a note... (e.g. This was hard)" rows="2" style="width:100%; margin-top:8px; resize:vertical">${esc(this.note || '')}</textarea>
       <div class="row" style="margin-top:8px"><button class="btn btn-start big" data-save>Save exercise</button></div>
       ${this.saved ? '<p class="saved-note">✓ Saved</p>' : ''}`
 
+    this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
     this.querySelectorAll('.reps').forEach((input) =>
       input.addEventListener('input', () => {
         const set = this.sets[Number(input.dataset.index)]
