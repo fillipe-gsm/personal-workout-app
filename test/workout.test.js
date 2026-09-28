@@ -365,6 +365,89 @@ describe('workout training weight input', () => {
       expect(b3.querySelector('a[href^="#/plates"]')).toBeNull()
     })
 
+    it('paged navigation shows one exercise at a time with dots and prev/next', async () => {
+      const exs = [store.addExercise('A'), store.addExercise('B'), store.addExercise('C')]
+      const plan = store.addPlan('Paged')
+      store.updatePlan(plan.id, { exerciseIds: exs.map((e) => e.id) })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+      await Promise.resolve()
+
+      const blocks = [...document.querySelectorAll('exercise-set-block')]
+      expect(blocks).toHaveLength(3)
+      expect(blocks[0].hidden).toBe(false)
+      expect(blocks[1].hidden).toBe(true)
+      expect(blocks[2].hidden).toBe(true)
+      expect(document.querySelector('[data-counter]').textContent).toBe('Exercise 1 of 3')
+      expect(document.querySelectorAll('[data-dot]')).toHaveLength(3)
+      expect(document.querySelector('[data-prev]').disabled).toBe(true)
+      expect(document.querySelector('[data-next]').disabled).toBe(false)
+      expect(document.querySelector('[data-collapse]')).toBeNull()
+
+      document.querySelector('[data-next]').click()
+      await Promise.resolve()
+      expect(blocks[0].hidden).toBe(true)
+      expect(blocks[1].hidden).toBe(false)
+      expect(document.querySelector('[data-counter]').textContent).toBe('Exercise 2 of 3')
+      expect(history.state?.index).toBe(1)
+
+      document.querySelectorAll('[data-dot]')[2].click()
+      await Promise.resolve()
+      expect(blocks[2].hidden).toBe(false)
+      expect(document.querySelector('[data-next]').disabled).toBe(true)
+
+      document.querySelector('[data-prev]').click()
+      await Promise.resolve()
+      expect(blocks[1].hidden).toBe(false)
+
+      // index persists across plates/history navigation
+      document.body.innerHTML = ''
+      await Promise.resolve()
+      const session2 = document.createElement('workout-session')
+      session2.setAttribute('plan-id', plan.id)
+      document.body.append(session2)
+      await Promise.resolve()
+      const blocks2 = [...document.querySelectorAll('exercise-set-block')]
+      expect(blocks2[1].hidden).toBe(false)
+      expect(document.querySelector('[data-counter]').textContent).toBe('Exercise 2 of 3')
+    })
+
+    it('swipe left/right navigates and ignores swipes from inputs', async () => {
+      const exs = [store.addExercise('A'), store.addExercise('B')]
+      const plan = store.addPlan('Swipe')
+      store.updatePlan(plan.id, { exerciseIds: exs.map((e) => e.id) })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+      await Promise.resolve()
+      const stage = document.querySelector('.workout-stage')
+
+      const touch = (type, target, x) => {
+        const ev = new Event(type, { bubbles: true })
+        ev.changedTouches = [{ clientX: x, clientY: 10 }]
+        Object.defineProperty(ev, 'target', { value: target })
+        stage.dispatchEvent(ev)
+      }
+      const card = document.querySelector('.workout-stage .card')
+      touch('touchstart', card, 200)
+      touch('touchend', card, 100)
+      await Promise.resolve()
+      expect(session.index).toBe(1)
+
+      touch('touchstart', card, 100)
+      touch('touchend', card, 200)
+      await Promise.resolve()
+      expect(session.index).toBe(0)
+
+      // swipe starting in an input is ignored
+      const input = document.querySelector('exercise-set-block .tw')
+      touch('touchstart', input, 200)
+      touch('touchend', input, 100)
+      await Promise.resolve()
+      expect(session.index).toBe(0)
+    })
+
     it('accessory generates sets from total/perSet', async () => {
       const acc = store.addExercise('Curl', 'Dumbbell', 'accessory')
       const plan = store.addPlan('AccPlan')

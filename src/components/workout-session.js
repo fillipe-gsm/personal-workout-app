@@ -12,6 +12,9 @@ export class WorkoutSession extends HTMLElement {
     }
     const today = new Date().toISOString().split('T')[0]
     const exercises = plan.exerciseIds.map(getExercise).filter(Boolean)
+    this.exercises = exercises
+    this.index = 0
+    this.blocks = []
     this.innerHTML = `
       <div class="screen">
         <app-header title="Workout: ${esc(plan.name)}" back="#/plans"></app-header>
@@ -20,14 +23,23 @@ export class WorkoutSession extends HTMLElement {
           <input class="input" type="date" data-workout-date value="${today}" />
         </div>
         ${exercises.length ? '' : '<p class="empty">This plan has no exercises.</p>'}
-        <div class="blocks"></div>
-        <button class="btn btn-start big" data-conclude style="margin-top:16px; width:100%">Conclude workout</button>
+        <div class="workout-progress">
+          <span class="muted" data-counter></span>
+          <div class="dots" data-dots></div>
+        </div>
+        <div class="blocks workout-stage"></div>
+        <div class="workout-nav">
+          <button class="btn" data-prev>← Prev</button>
+          <button class="btn" data-next>Next →</button>
+        </div>
+        <button class="btn btn-start big" data-conclude style="margin-top:12px; width:100%">Conclude workout</button>
       </div>`
-    const blocks = this.querySelector('.blocks')
+    const stage = this.querySelector('.blocks')
     for (const exercise of exercises) {
       const block = document.createElement('exercise-set-block')
       block.exercise = exercise
-      blocks.append(block)
+      stage.append(block)
+      this.blocks.push(block)
     }
 
     this._stack = []
@@ -37,30 +49,67 @@ export class WorkoutSession extends HTMLElement {
         block.sets = []
         block.note = ''
         block.suggestedReps = null
-        block.collapsed = false
         block.saved = false
         block.renderInput()
+        const i = this.blocks.indexOf(block)
+        if (i >= 0) this.show(i, { push: true })
+        else this._pushHistory()
       }
     }
     window.addEventListener('popstate', this._onPopState)
 
+    this.querySelector('[data-prev]')?.addEventListener('click', () => this.show(this.index - 1))
+    this.querySelector('[data-next]')?.addEventListener('click', () => this.show(this.index + 1))
+    this.querySelector('[data-dots]')?.addEventListener('click', (e) => {
+      const dot = e.target.closest('[data-dot]')
+      if (dot) this.show(Number(dot.dataset.dot))
+    })
     this.querySelector('[data-conclude]')?.addEventListener('click', () => {
       this._stack = []
       history.replaceState(null, '', location.href)
       location.hash = '#/'
     })
 
+    let touchX = null
+    let touchY = null
+    stage.addEventListener(
+      'touchstart',
+      (e) => {
+        if (e.target.closest('input, textarea, select')) return
+        const t = e.changedTouches[0]
+        touchX = t.clientX
+        touchY = t.clientY
+      },
+      { passive: true }
+    )
+    stage.addEventListener(
+      'touchend',
+      (e) => {
+        if (touchX == null) return
+        if (e.target.closest('input, textarea, select')) {
+          touchX = touchY = null
+          return
+        }
+        const t = e.changedTouches[0]
+        const dx = t.clientX - touchX
+        const dy = t.clientY - touchY
+        touchX = touchY = null
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (dx < 0) this.show(this.index + 1)
+          else this.show(this.index - 1)
+        }
+      },
+      { passive: true }
+    )
+
     const st = history.state
     if (st?.workoutPlanId === plan.id && Array.isArray(st.started)) {
       for (const entry of st.started) {
-        const block = [...this.querySelectorAll('exercise-set-block')].find(
-          (b) => b.exercise.id === entry.exerciseId
-        )
+        const block = this.blocks.find((b) => b.exercise.id === entry.exerciseId)
         if (!block) continue
         if (Array.isArray(entry.sets) && entry.sets.length) {
           block.sets = entry.sets.map((s) => ({ ...s }))
           block.note = entry.note || ''
-          block.collapsed = !!entry.collapsed
           block.suggestedReps = entry.suggestedReps ?? null
         } else if (entry.tw) {
           const tw = entry.tw
@@ -72,18 +121,54 @@ export class WorkoutSession extends HTMLElement {
               ]
             : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
           block.note = entry.note || ''
-          block.collapsed = !!entry.collapsed
           block.suggestedReps = entry.suggestedReps ?? null
         } else continue
         block.saved = false
         block.renderSets()
         this._stack.push(block)
       }
+      if (Number.isInteger(st.index)) this.index = st.index
     }
+    this.show(this.index, { push: false })
   }
 
   disconnectedCallback() {
     if (this._onPopState) window.removeEventListener('popstate', this._onPopState)
+  }
+
+  show(i, { push = true } = {}) {
+    if (!this.blocks?.length) return
+    this.index = Math.max(0, Math.min(this.blocks.length - 1, i))
+    this.blocks.forEach((b, bi) => {
+      b.hidden = bi !== this.index
+    })
+    const counter = this.querySelector('[data-counter]')
+    if (counter) counter.textContent = `Exercise ${this.index + 1} of ${this.blocks.length}`
+    const dots = this.querySelector('[data-dots]')
+    if (dots) {
+      dots.innerHTML = this.blocks
+        .map(
+          (b, bi) =>
+            `<button class="dot${bi === this.index ? ' active' : ''}${b.saved ? ' done' : ''}" data-dot="${bi}" aria-label="Exercise ${bi + 1}${b.saved ? ' saved' : ''}">${b.saved ? '✓' : bi + 1}</button>`
+        )
+        .join('')
+    }
+    const prev = this.querySelector('[data-prev]')
+    const next = this.querySelector('[data-next]')
+    if (prev) prev.disabled = this.index <= 0
+    if (next) next.disabled = this.index >= this.blocks.length - 1
+    if (push) this._pushHistory()
+  }
+
+  refreshDots() {
+    const dots = this.querySelector('[data-dots]')
+    if (!dots || !this.blocks) return
+    dots.innerHTML = this.blocks
+      .map(
+        (b, bi) =>
+          `<button class="dot${bi === this.index ? ' active' : ''}${b.saved ? ' done' : ''}" data-dot="${bi}" aria-label="Exercise ${bi + 1}${b.saved ? ' saved' : ''}">${b.saved ? '✓' : bi + 1}</button>`
+      )
+      .join('')
   }
 
   _pushHistory() {
@@ -91,10 +176,13 @@ export class WorkoutSession extends HTMLElement {
       exerciseId: b.exercise.id,
       sets: b.sets.map((s) => ({ ...s })),
       note: b.note || '',
-      collapsed: !!b.collapsed,
       suggestedReps: b.suggestedReps ?? null
     }))
-    history.replaceState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
+    history.replaceState(
+      { workoutPlanId: this.getAttribute('plan-id'), started, index: this.index },
+      '',
+      location.href
+    )
   }
 }
 
@@ -103,49 +191,24 @@ export class ExerciseSetBlock extends HTMLElement {
     this.sets = []
     this.note = ''
     this.suggestedReps = null
-    this.collapsed = false
     this.saved = false
     this.renderInput()
   }
 
-  toggleCollapse() {
-    this.collapsed = !this.collapsed
-    if (this.sets.length) this.renderSets()
-    else this.renderInput()
-    this.closest('workout-session')?._pushHistory()
-  }
-
   renderInput() {
     this.className = 'card'
-    if (this.collapsed) {
-      const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
-      this.innerHTML = `
-        <div class="card-title">
-          <span>${esc(this.exercise.name)} ${tierBadge} <small class="muted">(collapsed)</small></span>
-          <span>
-            <button class="btn btn-small" data-collapse>▼</button>
-            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
-          </span>
-        </div>`
-      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
-      return
-    }
     const isMainEx = isMain(this.exercise)
     const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
     if (isMainEx) {
       this.innerHTML = `
         <div class="card-title">
           <span>${esc(this.exercise.name)} ${tierBadge}</span>
-          <span>
-            <button class="btn btn-small" data-collapse>▲</button>
-            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
-          </span>
+          <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
-        <form class="row">
+        <form class="workout-start">
           <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
-      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
       this.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault()
         const tw = parseFloat(e.target.querySelector('.tw').value)
@@ -159,7 +222,7 @@ export class ExerciseSetBlock extends HTMLElement {
         this.renderSets()
         const session = this.closest('workout-session')
         if (session?._stack) {
-          session._stack.push(this)
+          if (!session._stack.includes(this)) session._stack.push(this)
           session._pushHistory()
         }
       })
@@ -167,20 +230,16 @@ export class ExerciseSetBlock extends HTMLElement {
       this.innerHTML = `
         <div class="card-title">
           <span>${esc(this.exercise.name)} ${tierBadge}</span>
-          <span>
-            <button class="btn btn-small" data-collapse>▲</button>
-            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
-          </span>
+          <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
-        <form class="col" style="gap:8px">
-          <div class="row">
-            <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
+        <form class="workout-start-acc">
+          <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
+          <div class="tw-grid">
             <input class="input total" type="number" step="1" min="1" placeholder="Total reps" />
             <input class="input perSet" type="number" step="1" min="1" placeholder="Reps / set" />
           </div>
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
-      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
       this.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault()
         const tw = parseFloat(e.target.querySelector('.tw').value)
@@ -195,7 +254,7 @@ export class ExerciseSetBlock extends HTMLElement {
         this.renderSets()
         const session = this.closest('workout-session')
         if (session?._stack) {
-          session._stack.push(this)
+          if (!session._stack.includes(this)) session._stack.push(this)
           session._pushHistory()
         }
       })
@@ -203,20 +262,6 @@ export class ExerciseSetBlock extends HTMLElement {
   }
 
   renderSets() {
-    if (this.collapsed) {
-      const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
-      const summary = `${this.sets.length} sets${this.sets[0] ? `, ${this.sets.find((s) => s.type === 'working')?.weightKg ?? this.sets[0].weightKg}kg` : ''}${this.saved ? ' ✓' : ''}`
-      this.innerHTML = `
-        <div class="card-title">
-          <span>${esc(this.exercise.name)} ${tierBadge} <small class="muted">${summary}</small></span>
-          <span>
-            <button class="btn btn-small" data-collapse>▼</button>
-            <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
-          </span>
-        </div>`
-      this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
-      return
-    }
     const bb = isBarbell(this.exercise)
     const isMainEx = isMain(this.exercise)
     const rows = this.sets.map((set, i) => {
@@ -240,10 +285,7 @@ export class ExerciseSetBlock extends HTMLElement {
     this.innerHTML = `
       <div class="card-title">
         <span>${esc(this.exercise.name)} ${tierBadge}</span>
-        <span>
-          <button class="btn btn-small" data-collapse>▲</button>
-          <a class="btn" href="#/history/${this.exercise.id}">Last records</a>
-        </span>
+        <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
       </div>
       ${rows.join('')}
       <div class="row"><button class="btn" data-extra>+ Extra working set</button></div>
@@ -251,7 +293,6 @@ export class ExerciseSetBlock extends HTMLElement {
       <div class="row" style="margin-top:8px"><button class="btn btn-start big" data-save>Save exercise</button></div>
       ${this.saved ? '<p class="saved-note">✓ Saved</p>' : ''}`
 
-    this.querySelector('[data-collapse]')?.addEventListener('click', () => this.toggleCollapse())
     this.querySelectorAll('.reps').forEach((input) =>
       input.addEventListener('input', () => {
         const set = this.sets[Number(input.dataset.index)]
@@ -304,6 +345,7 @@ export class ExerciseSetBlock extends HTMLElement {
     }
     this.saved = true
     this.renderSets()
+    session?.refreshDots?.()
   }
 }
 

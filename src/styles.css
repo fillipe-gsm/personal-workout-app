@@ -130,6 +130,40 @@ select.input { width: 100%; }
   .ex-add-controls .btn-primary { grid-column: 1 / -1; }
 }
 
+.workout-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.dots { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.dot {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.dot.active { border-color: var(--primary); color: var(--text); background: rgba(79, 124, 255, 0.15); }
+.dot.done { border-color: var(--start); color: var(--start); }
+.dot.active.done { background: rgba(47, 191, 113, 0.15); }
+.workout-stage { touch-action: pan-y; }
+.workout-nav { display: flex; gap: 8px; margin-top: 12px; }
+.workout-nav .btn { flex: 1; }
+.workout-nav .btn:disabled { opacity: 0.4; cursor: default; }
+.workout-start { display: flex; gap: 8px; align-items: center; }
+.workout-start .tw { flex: 1; }
+.workout-start-acc { display: flex; flex-direction: column; gap: 8px; }
+.workout-start-acc .tw { width: 100%; }
+.tw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tw-grid .input { width: 100%; min-width: 0; }
+.workout-start-acc .btn-primary { width: 100%; }
+
 .empty { color: var(--muted); padding: 12px; text-align: center; font-style: italic; }
 .muted { color: var(--muted); font-weight: normal; }
 .section-title { margin: 18px 0 8px; color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -146,6 +180,9 @@ select.input { width: 100%; }
 weight-profile,
 exercise-set-block {
   display: block;
+}
+exercise-set-block[hidden] {
+  display: none;
 }
 .card-title {
   display: flex;
