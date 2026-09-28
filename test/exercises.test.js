@@ -18,9 +18,7 @@ beforeEach(() => {
 })
 
 function listNames() {
-  return [...document.querySelectorAll('.list-item > span:first-child')].map((n) =>
-    (n.childNodes[0]?.textContent || n.textContent).trim()
-  )
+  return [...document.querySelectorAll('.ex-name')].map((n) => n.textContent.trim())
 }
 
 async function submitNewExercise(name) {
@@ -71,18 +69,52 @@ describe('exercises screen', () => {
     expect(listNames()).toEqual([])
   })
 
-  it('creates Barbell exercise by default and allows changing category', async () => {
+  it('creates Barbell exercise by default and allows changing category via Edit', async () => {
     document.body.append(document.createElement('exercise-list'))
     await submitNewExercise('Squat')
     expect(store.getData().exercises[0].category).toBe('Barbell')
     expect(document.querySelector('.badge').textContent).toBe('Barbell')
+    expect(document.querySelector('[data-category]')).toBeNull()
 
-    const sel = document.querySelector('[data-category]')
+    document.querySelector('[data-edit]').click()
+    await Promise.resolve()
+
+    const sel = document.querySelector('[data-edit-category]')
+    expect(sel).not.toBeNull()
     sel.value = 'Bodyweight'
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    document.querySelector('[data-save]').click()
     await Promise.resolve()
 
     expect(store.getData().exercises[0].category).toBe('Bodyweight')
+  })
+
+  it('allows renaming an exercise via Edit and Save', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('Squat')
+    document.querySelector('[data-edit]').click()
+    await Promise.resolve()
+
+    const nameInput = document.querySelector('[data-edit-name]')
+    nameInput.value = 'Back Squat'
+    document.querySelector('[data-save]').click()
+    await Promise.resolve()
+
+    expect(store.getData().exercises[0].name).toBe('Back Squat')
+    expect(listNames()).toEqual(['Back Squat'])
+  })
+
+  it('cancels edit without saving changes', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('Squat')
+    document.querySelector('[data-edit]').click()
+    await Promise.resolve()
+
+    document.querySelector('[data-edit-name]').value = 'Changed'
+    document.querySelector('[data-cancel]').click()
+    await Promise.resolve()
+
+    expect(store.getData().exercises[0].name).toBe('Squat')
+    expect(listNames()).toEqual(['Squat'])
   })
 
   it('adds exercise with selected category via form', async () => {

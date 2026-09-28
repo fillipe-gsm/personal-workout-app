@@ -98,6 +98,38 @@ select.input { width: 100%; }
 }
 .list-item > span:last-child { display: flex; gap: 6px; align-items: center; }
 
+.ex-card {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ex-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.ex-name-wrap { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ex-name { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.ex-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.ex-actions { display: flex; gap: 6px; flex: 0 0 auto; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.ex-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ex-controls .input { width: 100%; min-width: 0; padding: 10px; }
+.ex-add-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px; }
+.ex-add-form > .input[type="text"] { width: 100%; }
+.ex-add-controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; }
+.ex-add-controls .input, .ex-add-controls .btn { width: 100%; min-width: 0; }
+.ex-edit { display: flex; flex-direction: column; gap: 10px; }
+.ex-edit > .input { width: 100%; }
+.ex-edit-actions { display: flex; gap: 8px; }
+.ex-edit-actions .btn { flex: 1; }
+@media (max-width: 380px) {
+  .ex-add-controls { grid-template-columns: 1fr 1fr; }
+  .ex-add-controls .btn-primary { grid-column: 1 / -1; }
+}
+
 .empty { color: var(--muted); padding: 12px; text-align: center; font-style: italic; }
 .muted { color: var(--muted); font-weight: normal; }
 .section-title { margin: 18px 0 8px; color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; }
