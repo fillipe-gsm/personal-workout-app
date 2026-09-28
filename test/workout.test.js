@@ -382,7 +382,9 @@ describe('workout training weight input', () => {
       expect(block.sets).toHaveLength(9)
       expect(block.sets.every((s) => s.type === 'working')).toBe(true)
       expect(block.sets.every((s) => s.weightKg === 20)).toBe(true)
-      expect(block.sets.every((s) => s.reps === 5)).toBe(true)
+      expect(block.sets.every((s) => s.reps === null)).toBe(true)
+      expect(block.suggestedReps).toBe(5)
+      expect(block.querySelector('.reps').placeholder).toBe('5')
 
       document.body.innerHTML = ''
       history.replaceState(null, '', location.href)
@@ -399,7 +401,9 @@ describe('workout training weight input', () => {
       block2.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
       await Promise.resolve()
       expect(block2.sets).toHaveLength(3)
-      expect(block2.sets.every((s) => s.reps === 15)).toBe(true)
+      expect(block2.sets.every((s) => s.reps === null)).toBe(true)
+      expect(block2.suggestedReps).toBe(15)
+      expect(block2.querySelector('.reps').placeholder).toBe('15')
     })
   })
 })

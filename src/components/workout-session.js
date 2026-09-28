@@ -36,6 +36,7 @@ export class WorkoutSession extends HTMLElement {
       if (block && block.sets.length) {
         block.sets = []
         block.note = ''
+        block.suggestedReps = null
         block.collapsed = false
         block.saved = false
         block.renderInput()
@@ -60,6 +61,7 @@ export class WorkoutSession extends HTMLElement {
           block.sets = entry.sets.map((s) => ({ ...s }))
           block.note = entry.note || ''
           block.collapsed = !!entry.collapsed
+          block.suggestedReps = entry.suggestedReps ?? null
         } else if (entry.tw) {
           const tw = entry.tw
           const isMainEx = isMain(block.exercise)
@@ -71,6 +73,7 @@ export class WorkoutSession extends HTMLElement {
             : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
           block.note = entry.note || ''
           block.collapsed = !!entry.collapsed
+          block.suggestedReps = entry.suggestedReps ?? null
         } else continue
         block.saved = false
         block.renderSets()
@@ -88,7 +91,8 @@ export class WorkoutSession extends HTMLElement {
       exerciseId: b.exercise.id,
       sets: b.sets.map((s) => ({ ...s })),
       note: b.note || '',
-      collapsed: !!b.collapsed
+      collapsed: !!b.collapsed,
+      suggestedReps: b.suggestedReps ?? null
     }))
     history.replaceState({ workoutPlanId: this.getAttribute('plan-id'), started }, '', location.href)
   }
@@ -98,6 +102,7 @@ export class ExerciseSetBlock extends HTMLElement {
   connectedCallback() {
     this.sets = []
     this.note = ''
+    this.suggestedReps = null
     this.collapsed = false
     this.saved = false
     this.renderInput()
@@ -183,7 +188,8 @@ export class ExerciseSetBlock extends HTMLElement {
         const perSet = parseInt(e.target.querySelector('.perSet').value, 10)
         if (!tw || tw <= 0 || !total || total <= 0 || !perSet || perSet <= 0) return
         const count = Math.max(1, Math.floor(total / perSet))
-        this.sets = Array.from({ length: count }, () => ({ type: 'working', weightKg: tw, reps: perSet }))
+        this.suggestedReps = perSet
+        this.sets = Array.from({ length: count }, () => ({ type: 'working', weightKg: tw, reps: null }))
         this.note = ''
         this.saved = false
         this.renderSets()
@@ -212,6 +218,7 @@ export class ExerciseSetBlock extends HTMLElement {
       return
     }
     const bb = isBarbell(this.exercise)
+    const isMainEx = isMain(this.exercise)
     const rows = this.sets.map((set, i) => {
       const warmupsSoFar = this.sets.slice(0, i).filter((s) => s.type === 'warmup').length
       const label =
@@ -220,11 +227,12 @@ export class ExerciseSetBlock extends HTMLElement {
           : set.type === 'extra'
             ? 'Extra working set'
             : `Working set ${this.sets.slice(0, i).filter((s) => s.type === 'working').length + 1}`
+      const ph = !isMainEx && this.suggestedReps != null ? this.suggestedReps : 'reps'
       return `
         <div class="set-row">
           <span class="set-label ${set.type}">${label}</span>
           <strong>${set.weightKg} kg</strong>
-          <input class="input reps" data-index="${i}" type="number" min="0" placeholder="reps" value="${set.reps ?? ''}" />
+          <input class="input reps" data-index="${i}" type="number" min="0" placeholder="${ph}" value="${set.reps ?? ''}" />
           ${bb ? `<a class="btn btn-small" href="#/plates?weight=${set.weightKg}">Plates</a>` : ''}
         </div>`
     })
