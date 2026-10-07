@@ -1,4 +1,4 @@
-import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isMain } from '../store.js'
+import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isBodyweight, isMain } from '../store.js'
 import { warmupWeights } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
@@ -111,7 +111,7 @@ export class WorkoutSession extends HTMLElement {
           block.sets = entry.sets.map((s) => ({ ...s }))
           block.note = entry.note || ''
           block.suggestedReps = entry.suggestedReps ?? null
-        } else if (entry.tw) {
+        } else if (entry.tw != null) {
           const tw = entry.tw
           const isMainEx = isMain(block.exercise)
           block.sets = isMainEx
@@ -200,19 +200,21 @@ export class ExerciseSetBlock extends HTMLElement {
     const isMainEx = isMain(this.exercise)
     const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
     if (isMainEx) {
+      const bw = isBodyweight(this.exercise)
       this.innerHTML = `
         <div class="card-title">
           <span>${esc(this.exercise.name)} ${tierBadge}</span>
           <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
         <form class="workout-start">
-          <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
+          <input class="input tw" type="number" step="1" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
       this.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault()
-        const tw = parseFloat(e.target.querySelector('.tw').value)
-        if (!tw || tw <= 0) return
+        const raw = e.target.querySelector('.tw').value
+        const tw = raw.trim() === '' && bw ? 0 : parseFloat(raw)
+        if (Number.isNaN(tw) || tw < 0 || (!bw && tw <= 0)) return
         this.sets = [
           ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
           ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
@@ -227,13 +229,14 @@ export class ExerciseSetBlock extends HTMLElement {
         }
       })
     } else {
+      const bw = isBodyweight(this.exercise)
       this.innerHTML = `
         <div class="card-title">
           <span>${esc(this.exercise.name)} ${tierBadge}</span>
           <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
         <form class="workout-start-acc">
-          <input class="input tw" type="number" step="1" min="0" placeholder="Training weight (kg)" />
+          <input class="input tw" type="number" step="1" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
           <div class="tw-grid">
             <input class="input total" type="number" step="1" min="1" placeholder="Total reps" />
             <input class="input perSet" type="number" step="1" min="1" placeholder="Reps / set" />
@@ -242,10 +245,11 @@ export class ExerciseSetBlock extends HTMLElement {
         </form>`
       this.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault()
-        const tw = parseFloat(e.target.querySelector('.tw').value)
+        const raw = e.target.querySelector('.tw').value
+        const tw = raw.trim() === '' && bw ? 0 : parseFloat(raw)
         const total = parseInt(e.target.querySelector('.total').value, 10)
         const perSet = parseInt(e.target.querySelector('.perSet').value, 10)
-        if (!tw || tw <= 0 || !total || total <= 0 || !perSet || perSet <= 0) return
+        if (Number.isNaN(tw) || tw < 0 || (!bw && tw <= 0) || !total || total <= 0 || !perSet || perSet <= 0) return
         const count = Math.max(1, Math.floor(total / perSet))
         this.suggestedReps = perSet
         this.sets = Array.from({ length: count }, () => ({ type: 'working', weightKg: tw, reps: null }))

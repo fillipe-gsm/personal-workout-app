@@ -45,6 +45,10 @@ export function isBarbell(exercise) {
   return !exercise?.category || exercise.category === 'Barbell'
 }
 
+export function isBodyweight(exercise) {
+  return exercise?.category === 'Bodyweight'
+}
+
 export function isMain(exercise) {
   return normalizeTier(exercise?.tier) === 'main'
 }

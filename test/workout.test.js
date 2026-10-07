@@ -488,5 +488,79 @@ describe('workout training weight input', () => {
       expect(block2.suggestedReps).toBe(15)
       expect(block2.querySelector('.reps').placeholder).toBe('15')
     })
+
+    it('bodyweight main accepts 0 extra weight with warm-ups at 0', async () => {
+      const bw = store.addExercise('Pull-up', 'Bodyweight', 'main')
+      const plan = store.addPlan('BWPlan')
+      store.updatePlan(plan.id, { exerciseIds: [bw.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      expect(block.querySelector('.tw').placeholder).toBe('Extra weight (kg)')
+      block.querySelector('.tw').value = '0'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      expect(block.sets).toHaveLength(6)
+      expect(block.sets.every((s) => s.weightKg === 0)).toBe(true)
+    })
+
+    it('bodyweight accessory accepts 0 extra weight', async () => {
+      const bw = store.addExercise('Dip', 'Bodyweight', 'accessory')
+      const plan = store.addPlan('BWAccPlan')
+      store.updatePlan(plan.id, { exerciseIds: [bw.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      block.querySelector('.tw').value = '0'
+      block.querySelector('.total').value = '30'
+      block.querySelector('.perSet').value = '10'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      expect(block.sets).toHaveLength(3)
+      expect(block.sets.every((s) => s.weightKg === 0)).toBe(true)
+    })
+
+    it('bodyweight empty weight defaults to 0', async () => {
+      const bw = store.addExercise('Pull-up', 'Bodyweight', 'main')
+      const plan = store.addPlan('BWEmptyPlan')
+      store.updatePlan(plan.id, { exerciseIds: [bw.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      block.querySelector('.tw').value = ''
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      expect(block.sets).toHaveLength(6)
+      expect(block.sets.every((s) => s.weightKg === 0)).toBe(true)
+    })
+
+    it('non-bodyweight still rejects 0 and empty weight', async () => {
+      const bb = store.addExercise('Squat', 'Barbell', 'main')
+      const plan = store.addPlan('RejectPlan')
+      store.updatePlan(plan.id, { exerciseIds: [bb.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      block.querySelector('.tw').value = '0'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      expect(block.sets).toHaveLength(0)
+
+      block.querySelector('.tw').value = ''
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      expect(block.sets).toHaveLength(0)
+    })
   })
 })
