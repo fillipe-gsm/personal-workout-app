@@ -563,4 +563,70 @@ describe('workout training weight input', () => {
       expect(block.sets).toHaveLength(0)
     })
   })
+
+  describe('history weight filter', () => {
+    async function showHistory(exerciseId) {
+      await import('../src/components/exercise-history.js')
+      const el = document.createElement('exercise-history')
+      el.setAttribute('exercise-id', exerciseId)
+      document.body.append(el)
+      await Promise.resolve()
+      return el
+    }
+
+    function addRec(exerciseId, date, tw) {
+      store.addRecord({
+        exerciseId,
+        date,
+        sets: [{ type: 'working', weightKg: tw, reps: 5 }]
+      })
+    }
+
+    function setFilter(value) {
+      const input = document.querySelector('[data-filter-weight]')
+      input.value = value
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+
+    it('shows last 10 by default and finds older weights via filter', async () => {
+      const ex = store.addExercise('Squat', 'Barbell', 'main')
+      for (let d = 19; d <= 28; d++) addRec(ex.id, `2026-09-${d}T12:00:00.000Z`, 100)
+      addRec(ex.id, '2026-07-15T12:00:00.000Z', 80)
+      addRec(ex.id, '2026-07-01T12:00:00.000Z', 90)
+      await showHistory(ex.id)
+
+      expect(document.querySelectorAll('[data-records] .card')).toHaveLength(10)
+      expect(document.querySelector('[data-count]').textContent).toBe('Showing last 10 of 12')
+
+      setFilter('80')
+      expect(document.querySelectorAll('[data-records] .card')).toHaveLength(1)
+      expect(document.querySelector('[data-count]').textContent).toBe('1 record with 80 kg')
+
+      document.querySelector('[data-clear-filter]').click()
+      expect(document.querySelectorAll('[data-records] .card')).toHaveLength(10)
+      expect(document.querySelector('[data-filter-weight]').value).toBe('')
+    })
+
+    it('shows a no-match message for unknown weights', async () => {
+      const ex = store.addExercise('Squat', 'Barbell', 'main')
+      addRec(ex.id, '2026-09-28T12:00:00.000Z', 100)
+      await showHistory(ex.id)
+
+      setFilter('999')
+      expect(document.querySelectorAll('[data-records] .card')).toHaveLength(0)
+      expect(document.querySelector('[data-records] .empty').textContent).toBe('No records with 999 kg.')
+    })
+
+    it('bodyweight history labels extra weight', async () => {
+      const ex = store.addExercise('Pull-up', 'Bodyweight', 'main')
+      addRec(ex.id, '2026-09-28T12:00:00.000Z', 0)
+      await showHistory(ex.id)
+
+      expect(document.querySelector('[data-filter-weight]').placeholder).toContain('extra')
+      expect(document.querySelector('[data-records] .card-title .muted').textContent).toBe('Extra 0 kg')
+
+      setFilter('0')
+      expect(document.querySelectorAll('[data-records] .card')).toHaveLength(1)
+    })
+  })
 })
