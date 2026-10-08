@@ -127,6 +127,10 @@ select.input { width: 100%; }
 .ex-edit-actions .btn { flex: 1; }
 .hist-filter { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .hist-filter .input { flex: 1; min-width: 0; }
+.backup-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.backup-preview { margin-top: 12px; border-top: 1px solid var(--border, #e0e0e0); padding-top: 8px; }
+.status-ok { color: var(--ok, #1a7f37); padding: 4px 2px; }
+.status-err { color: var(--danger, #b42318); padding: 4px 2px; }
 @media (max-width: 380px) {
   .ex-add-controls { grid-template-columns: 1fr 1fr; }
   .ex-add-controls .btn-primary { grid-column: 1 / -1; }

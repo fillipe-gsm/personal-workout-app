@@ -134,3 +134,80 @@ describe('records', () => {
     expect(recs[0].sets[0].weightKg).toBe(90)
   })
 })
+
+describe('backup export/import', () => {
+  function seed() {
+    const ex = store.addExercise('Squat', 'Barbell', 'main')
+    const plan = store.addPlan('Legs')
+    store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+    const profile = store.addProfile('Gym', 20)
+    store.updateProfile(profile.id, { plates: [{ kg: 25, count: Infinity }, { kg: 20, count: 2 }] })
+    store.addRecord({ exerciseId: ex.id, sets: [{ type: 'working', weightKg: 100, reps: 5 }] })
+  }
+
+  // Simulates saving to a file and reading it back on another phone.
+  function saveAndLoadFile() {
+    return JSON.parse(JSON.stringify(store.exportData()))
+  }
+
+  it('round-trips all data through a JSON file', () => {
+    seed()
+    const file = saveAndLoadFile()
+    const before = JSON.stringify(store.getData())
+    store.clearAllData()
+    expect(store.getData().exercises).toHaveLength(0)
+
+    const { payload, summary } = store.previewBackup(JSON.stringify(file))
+    expect(summary).toMatchObject({ exercises: 1, plans: 1, profiles: 1, records: 1 })
+    expect(summary.exportedAt).toBeTruthy()
+    const result = store.importBackup(payload)
+    expect(result).toEqual(summary)
+    expect(JSON.stringify(store.getData())).toBe(before)
+  })
+
+  it('restores unlimited plate counts across JSON serialization', () => {
+    seed()
+    const file = saveAndLoadFile()
+    // JSON turns Infinity into null; import must map it back.
+    expect(file.data.profiles[0].plates[0].count).toBeNull()
+    store.clearAllData()
+    store.importBackup(store.previewBackup(JSON.stringify(file)).payload)
+    expect(store.getData().profiles[0].plates[0].count).toBe(Infinity)
+  })
+
+  it('rejects corrupt or invalid files without touching data', () => {
+    seed()
+    const before = JSON.stringify(store.getData())
+    for (const bad of ['not json', '{}', '{"data":{"exercises":"nope"}}', '[1,2,3]', 'null']) {
+      expect(() => store.previewBackup(bad)).toThrow()
+    }
+    // A well-formed but empty envelope previews with zero counts; data is
+    // only replaced on explicit import, so previewing leaves data untouched.
+    const empty = store.previewBackup('{"data":{}}')
+    expect(empty.summary).toMatchObject({ exercises: 0, plans: 0, profiles: 0, records: 0 })
+    expect(JSON.stringify(store.getData())).toBe(before)
+  })
+
+  it('accepts a bare data object and normalizes legacy values', () => {
+    const bare = {
+      exercises: [{ id: 'x', name: 'Curl', category: 'Dumbbel' }],
+      plans: [],
+      profiles: [],
+      records: []
+    }
+    const { summary } = store.previewBackup(JSON.stringify(bare))
+    expect(summary.exercises).toBe(1)
+    store.importBackup(bare)
+    expect(store.getExercise('x').category).toBe('Dumbbell')
+  })
+
+  it('import replaces existing data on the phone', () => {
+    seed()
+    const file = saveAndLoadFile()
+    store.addExercise('Extra')
+    expect(store.getData().exercises).toHaveLength(2)
+    store.importBackup(store.previewBackup(JSON.stringify(file)).payload)
+    expect(store.getData().exercises).toHaveLength(1)
+    expect(store.getExercise('Extra')).toBeUndefined()
+  })
+})

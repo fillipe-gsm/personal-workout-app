@@ -193,3 +193,71 @@ export function getRecordsForExercise(exerciseId) {
     .filter((r) => r.exerciseId === exerciseId)
     .sort((a, b) => b.date.localeCompare(a.date))
 }
+
+export const BACKUP_VERSION = 1
+
+function backupSummary(payload) {
+  return {
+    exportedAt: payload.exportedAt ?? null,
+    exercises: payload.data.exercises.length,
+    plans: payload.data.plans.length,
+    profiles: payload.data.profiles.length,
+    records: payload.data.records.length
+  }
+}
+
+function validateBackupPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Not a workout backup file.')
+  }
+  // Accept the canonical { version, exportedAt, data } envelope, or a bare
+  // data object ({ exercises, plans, profiles, records }) for leniency.
+  // A bare object with none of the collection keys is not a backup.
+  const isEnvelope = payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+  const hasBareKey = ['exercises', 'plans', 'profiles', 'records'].some((k) => k in payload)
+  if (!isEnvelope && !hasBareKey) throw new Error('Not a workout backup file.')
+  const envelope = isEnvelope ? payload : null
+  const raw = isEnvelope ? payload.data : payload
+  const d = { ...structuredClone(DEFAULT_DATA), ...raw }
+  for (const key of ['exercises', 'plans', 'profiles', 'records']) {
+    if (!Array.isArray(d[key])) throw new Error('Backup is missing valid data.')
+    if (!d[key].every((item) => item && typeof item === 'object')) {
+      throw new Error('Backup contains invalid entries.')
+    }
+  }
+  return {
+    version: envelope?.version ?? null,
+    exportedAt: typeof (envelope?.exportedAt ?? payload.exportedAt) === 'string'
+      ? (envelope?.exportedAt ?? payload.exportedAt)
+      : null,
+    data: normalize(d)
+  }
+}
+
+export function exportData() {
+  return {
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: structuredClone(data)
+  }
+}
+
+export function previewBackup(fileText) {
+  let parsed
+  try {
+    parsed = JSON.parse(fileText)
+  } catch {
+    throw new Error('Could not read that file as JSON.')
+  }
+  const payload = validateBackupPayload(parsed)
+  return { payload, summary: backupSummary(payload) }
+}
+
+export function importBackup(payload) {
+  // Accepts either the validated payload from previewBackup() (already a
+  // valid envelope) or raw parsed JSON; validation runs in both cases.
+  const valid = validateBackupPayload(payload)
+  data = valid.data
+  save()
+  return backupSummary(valid)
+}

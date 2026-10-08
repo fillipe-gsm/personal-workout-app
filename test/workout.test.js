@@ -629,4 +629,91 @@ describe('workout training weight input', () => {
       expect(document.querySelectorAll('[data-records] .card')).toHaveLength(1)
     })
   })
+
+  describe('backup view', () => {
+    async function showBackup() {
+      await import('../src/components/backup.js')
+      const el = document.createElement('backup-view')
+      document.body.append(el)
+      await Promise.resolve()
+      return el
+    }
+
+    function chooseFile(jsonText) {
+      const input = document.querySelector('[data-file]')
+      const file = new File([jsonText], 'workout-backup-test.json', { type: 'application/json' })
+      Object.defineProperty(input, 'files', { value: [file], configurable: true })
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+
+    it('renders export and import controls without a share button in jsdom', async () => {
+      store.addExercise('Squat')
+      await showBackup()
+      expect(document.querySelector('[data-export]').textContent).toBe('Download backup')
+      expect(document.querySelector('[data-file]')).toBeTruthy()
+      expect(document.querySelector('[data-share]')).toBeNull()
+    })
+
+    it('downloads a backup file on export', async () => {
+      store.addExercise('Squat')
+      await showBackup()
+      const urls = []
+      URL.createObjectURL = (blob) => {
+        urls.push(blob)
+        return 'blob:fake'
+      }
+      URL.revokeObjectURL = () => {}
+      document.querySelector('[data-export]').click()
+      expect(urls).toHaveLength(1)
+      const exported = JSON.parse(await urls[0].text())
+      expect(exported.version).toBe(1)
+      expect(exported.data.exercises).toHaveLength(1)
+      expect(document.querySelector('[data-status]').textContent).toContain('Saved workout-backup-')
+    })
+
+    it('imports a backup file with confirm, replacing phone data', async () => {
+      const ex = store.addExercise('Squat')
+      store.addRecord({ exerciseId: ex.id, sets: [{ type: 'working', weightKg: 100, reps: 5 }] })
+      const fileText = JSON.stringify(store.exportData())
+
+      store.clearAllData()
+      store.addExercise('Local only')
+      await showBackup()
+
+      chooseFile(fileText)
+      await new Promise((r) => setTimeout(r, 50))
+      expect(document.querySelector('.backup-preview').textContent).toContain('1 exercise')
+      expect(document.querySelector('.backup-preview').textContent).toContain('1 record')
+
+      document.querySelector('[data-confirm]').click()
+      expect(store.getData().exercises).toHaveLength(1)
+      expect(store.getExercise(ex.id).name).toBe('Squat')
+      expect(store.getRecordsForExercise(ex.id)).toHaveLength(1)
+      expect(document.querySelector('[data-status]').textContent).toContain('Import complete')
+    })
+
+    it('shows an error for invalid files and keeps data', async () => {
+      store.addExercise('Squat')
+      await showBackup()
+
+      chooseFile('this is not json')
+      await new Promise((r) => setTimeout(r, 50))
+      expect(document.querySelector('.backup-preview')).toBeNull()
+      expect(document.querySelector('[data-status]').textContent).toContain('JSON')
+      expect(store.getData().exercises).toHaveLength(1)
+    })
+
+    it('cancel discards the pending import', async () => {
+      store.addExercise('Squat')
+      const fileText = JSON.stringify(store.exportData())
+      await showBackup()
+
+      chooseFile(fileText)
+      await new Promise((r) => setTimeout(r, 50))
+      expect(document.querySelector('.backup-preview')).toBeTruthy()
+      document.querySelector('[data-cancel]').click()
+      expect(document.querySelector('.backup-preview')).toBeNull()
+      expect(document.querySelector('[data-status]')).toBeNull()
+    })
+  })
 })

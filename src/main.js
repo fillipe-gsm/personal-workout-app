@@ -7,6 +7,7 @@ import './components/workout-session.js'
 import './components/exercise-history.js'
 import './components/profiles.js'
 import './components/plate-calculator.js'
+import './components/backup.js'
 
 function create(tag, attrs = {}) {
   const node = document.createElement(tag)
@@ -23,6 +24,7 @@ route('/plan/:id', (params) => create('plan-edit', { 'plan-id': params.id }))
 route('/workout/:id', (params) => create('workout-session', { 'plan-id': params.id }))
 route('/history/:id', (params) => create('exercise-history', { 'exercise-id': params.id }))
 route('/profiles', () => create('profile-list'))
+route('/backup', () => create('backup-view'))
 route('/plates', (params, query) =>
   create('plate-calculator', { weight: query.weight, 'profile-id': query.profile })
 )
