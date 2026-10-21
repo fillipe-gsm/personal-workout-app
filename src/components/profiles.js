@@ -10,7 +10,7 @@ export class ProfileList extends ReactiveElement {
         <app-header title="Weight Profiles" back="#/"></app-header>
         <form class="col">
           <input class="input" type="text" placeholder="Profile name (e.g. Home gym)" />
-          <input class="input barbell" type="number" step="any" min="0" placeholder="Barbell kg" />
+          <input class="input barbell" type="number" step="any" min="0.01" placeholder="Barbell kg" />
           <button class="btn btn-primary" type="submit">Add profile</button>
         </form>
         ${
@@ -45,15 +45,16 @@ export class WeightProfile extends HTMLElement {
     }
     this.className = 'card'
     const rows = p.plates.map((plate, i) => {
-      const control =
-        plate.count === Infinity
-          ? `<button class="btn btn-small" data-limit="${i}">∞ → limit</button>`
-          : `<input class="input tiny" data-count="${i}" type="number" min="0" step="1" value="${plate.count}" />`
+      const unlimited = plate.count === Infinity
       return `
         <li class="list-item">
           <span>${plate.kg} kg</span>
           <span>
-            ${control}
+            <label class="plate-unlimited">
+              <input type="checkbox" data-unlimited="${i}" ${unlimited ? 'checked' : ''} /> ∞
+            </label>
+            <input class="input tiny" data-count="${i}" type="number" min="1" step="1"
+              value="${unlimited ? '' : plate.count}" ${unlimited ? 'disabled' : ''} placeholder="count" />
             <button class="btn btn-danger btn-small" data-remove="${i}">✕</button>
           </span>
         </li>`
@@ -67,16 +68,21 @@ export class WeightProfile extends HTMLElement {
         ${p.plates.length ? rows.join('') : '<li class="empty">No plates configured — all default to ∞ when added</li>'}
       </ul>
       <form class="row">
-        <input class="input tiny new-plate" type="number" step="any" min="0" placeholder="kg" />
-        <button class="btn btn-primary" type="submit">+ Plate (∞)</button>
+        <input class="input tiny new-plate" type="number" step="any" min="0.01" placeholder="kg" />
+        <input class="input tiny new-count" type="number" min="1" step="1" placeholder="∞" />
+        <button class="btn btn-primary" type="submit">+ Add</button>
       </form>
+      <p class="muted plate-hint">Count is total plates (both sides). Leave empty for unlimited.</p>
       <a class="btn btn-start big" href="#/plates?profile=${p.id}">Open calculator</a>`
 
     this.querySelector('form').addEventListener('submit', (e) => {
       e.preventDefault()
       const kg = parseFloat(this.querySelector('.new-plate').value)
-      if (!kg || kg <= 0) return
-      updateProfile(p.id, { plates: [...p.plates, { kg, count: Infinity }] })
+      const countRaw = this.querySelector('.new-count').value.trim()
+      const count = countRaw === '' ? Infinity : parseInt(countRaw, 10)
+      if (!Number.isFinite(kg) || kg <= 0) return
+      if (count !== Infinity && (!Number.isFinite(count) || count < 1)) return
+      updateProfile(p.id, { plates: [...p.plates, { kg, count }] })
     })
 
     this.querySelector('[data-delete-profile]').addEventListener('click', () => {
@@ -86,14 +92,16 @@ export class WeightProfile extends HTMLElement {
     this.querySelectorAll('[data-count]').forEach((input) =>
       input.addEventListener('change', () => {
         const count = parseInt(input.value, 10)
-        if (isNaN(count) || count < 0) return
+        if (isNaN(count) || count < 1) return
         this.setCount(p, Number(input.dataset.count), count)
       })
     )
 
-    this.querySelectorAll('[data-limit]').forEach((btn) =>
-      btn.addEventListener('click', () => {
-        this.setCount(p, Number(btn.dataset.limit), 1)
+    this.querySelectorAll('[data-unlimited]').forEach((box) =>
+      box.addEventListener('change', () => {
+        const index = Number(box.dataset.unlimited)
+        const current = p.plates[index].count
+        this.setCount(p, index, box.checked ? Infinity : Number.isFinite(current) ? current || 1 : 1)
       })
     )
 
