@@ -101,6 +101,7 @@ select.input { width: 100%; }
 .plate-unlimited input { margin: 0; }
 .plate-hint { margin: -4px 0 10px; font-size: 0.8rem; }
 .input:invalid { border-color: var(--danger); }
+.profiles-top { margin-bottom: 12px; }
 
 .ex-card {
   padding: 14px;

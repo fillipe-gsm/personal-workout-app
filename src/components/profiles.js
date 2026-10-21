@@ -2,32 +2,146 @@ import { getData, addProfile, updateProfile, deleteProfile, getProfile } from '.
 import { ReactiveElement, esc } from './base.js'
 import './header.js'
 
-export class ProfileList extends ReactiveElement {
+export class ProfilePage extends ReactiveElement {
+  connectedCallback() {
+    const profiles = getData().profiles
+    const id = this.getAttribute('profile-id')
+    const idx = id ? profiles.findIndex((p) => p.id === id) : 0
+    this.index = idx > 0 ? idx : 0
+    super.connectedCallback()
+    this.syncUrl()
+  }
+
   template() {
-    const { profiles } = getData()
+    const profiles = getData().profiles
+    this.index = Math.max(0, Math.min(profiles.length - 1, this.index ?? 0))
+    const addButton = '<a class="btn btn-primary big" href="#/profiles/add">+ Add profile</a>'
+    if (!profiles.length) {
+      return `
+        <div class="screen">
+          <app-header title="Weight Profiles" back="#/"></app-header>
+          <div class="profiles-top">${addButton}</div>
+          <p class="empty">No profiles yet. Add one to use the plate calculator.</p>
+        </div>`
+    }
+    const current = profiles[this.index]
+    const dots = profiles
+      .map(
+        (p, i) =>
+          `<button class="dot${i === this.index ? ' active' : ''}" data-dot="${i}" title="${esc(p.name)}" aria-label="Profile ${esc(p.name)}">${i + 1}</button>`
+      )
+      .join('')
     return `
       <div class="screen">
         <app-header title="Weight Profiles" back="#/"></app-header>
-        <form class="col">
-          <input class="input" type="text" placeholder="Profile name (e.g. Home gym)" />
-          <input class="input barbell" type="number" step="any" min="0.01" placeholder="Barbell kg" />
-          <button class="btn btn-primary" type="submit">Add profile</button>
-        </form>
-        ${
-          profiles.length
-            ? profiles.map((p) => `<weight-profile profile-id="${p.id}"></weight-profile>`).join('')
-            : '<p class="empty">No profiles yet. Add one to use the plate calculator.</p>'
-        }
+        <div class="profiles-top">${addButton}</div>
+        <div class="workout-progress">
+          <span class="muted" data-counter>Profile ${this.index + 1} of ${profiles.length}</span>
+          <div class="dots" data-dots>${dots}</div>
+        </div>
+        <div class="profile-stage workout-stage">
+          <weight-profile profile-id="${current.id}"></weight-profile>
+        </div>
+        <div class="workout-nav">
+          <button class="btn" data-prev ${this.index <= 0 ? 'disabled' : ''}>← Prev</button>
+          <button class="btn" data-next ${this.index >= profiles.length - 1 ? 'disabled' : ''}>Next →</button>
+        </div>
       </div>`
   }
 
   bind() {
+    this.querySelector('[data-prev]')?.addEventListener('click', () => this.show(this.index - 1))
+    this.querySelector('[data-next]')?.addEventListener('click', () => this.show(this.index + 1))
+    this.querySelector('[data-dots]')?.addEventListener('click', (e) => {
+      const dot = e.target.closest('[data-dot]')
+      if (dot) this.show(Number(dot.dataset.dot))
+    })
+
+    this.querySelector('weight-profile')?.addEventListener('delete-request', () => {
+      const profile = getData().profiles[this.index]
+      if (!profile || !confirm(`Delete profile "${profile.name}"?`)) return
+      deleteProfile(profile.id)
+      const remaining = getData().profiles
+      this.index = Math.max(0, Math.min(this.index, remaining.length - 1))
+      this.syncUrl()
+      this.rerender()
+    })
+
+    const stage = this.querySelector('.profile-stage')
+    if (!stage) return
+    let touchX = null
+    let touchY = null
+    stage.addEventListener(
+      'touchstart',
+      (e) => {
+        if (e.target.closest('input, textarea, select')) return
+        const t = e.changedTouches[0]
+        touchX = t.clientX
+        touchY = t.clientY
+      },
+      { passive: true }
+    )
+    stage.addEventListener(
+      'touchend',
+      (e) => {
+        if (touchX == null) return
+        if (e.target.closest('input, textarea, select')) {
+          touchX = touchY = null
+          return
+        }
+        const t = e.changedTouches[0]
+        const dx = t.clientX - touchX
+        const dy = t.clientY - touchY
+        touchX = touchY = null
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (dx < 0) this.show(this.index + 1)
+          else this.show(this.index - 1)
+        }
+      },
+      { passive: true }
+    )
+  }
+
+  show(i) {
+    const profiles = getData().profiles
+    if (!profiles.length) return
+    const next = Math.max(0, Math.min(profiles.length - 1, i))
+    if (next === this.index) return
+    this.index = next
+    this.syncUrl()
+    this.rerender()
+  }
+
+  syncUrl() {
+    const profiles = getData().profiles
+    const path = profiles.length ? `#/profiles/${profiles[this.index].id}` : '#/profiles'
+    if (location.hash !== path) history.replaceState(null, '', path)
+  }
+
+  rerender() {
+    this.innerHTML = this.template()
+    this.bind()
+  }
+}
+
+export class ProfileAdd extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = `
+      <div class="screen">
+        <app-header title="Add Profile" back="#/profiles"></app-header>
+        <form class="col">
+          <input class="input" name="name" type="text" required placeholder="Profile name (e.g. Home gym)" />
+          <input class="input barbell" name="barbell" type="number" step="any" min="0.01" required placeholder="Barbell kg" />
+          <button class="btn btn-primary" type="submit">Add profile</button>
+        </form>
+      </div>`
     this.querySelector('form').addEventListener('submit', (e) => {
       e.preventDefault()
-      const name = e.target.querySelector('input[type="text"]').value.trim()
-      const kg = parseFloat(e.target.querySelector('.barbell').value)
-      if (!name || !kg) return
-      addProfile(name, kg)
+      const name = this.querySelector('[name="name"]').value.trim()
+      const kg = parseFloat(this.querySelector('.barbell').value)
+      if (!name || !Number.isFinite(kg) || kg <= 0) return
+      const profile = addProfile(name, kg)
+      location.replace(`#/profiles/${profile.id}`)
     })
   }
 }
@@ -86,7 +200,7 @@ export class WeightProfile extends HTMLElement {
     })
 
     this.querySelector('[data-delete-profile]').addEventListener('click', () => {
-      if (confirm(`Delete profile "${p.name}"?`)) deleteProfile(p.id)
+      this.dispatchEvent(new CustomEvent('delete-request', { bubbles: true }))
     })
 
     this.querySelectorAll('[data-count]').forEach((input) =>
@@ -119,5 +233,6 @@ export class WeightProfile extends HTMLElement {
   }
 }
 
-if (!customElements.get('profile-list')) customElements.define('profile-list', ProfileList)
+if (!customElements.get('profile-page')) customElements.define('profile-page', ProfilePage)
+if (!customElements.get('profile-add')) customElements.define('profile-add', ProfileAdd)
 if (!customElements.get('weight-profile')) customElements.define('weight-profile', WeightProfile)
