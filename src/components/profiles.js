@@ -10,7 +10,7 @@ export class ProfileList extends ReactiveElement {
         <app-header title="Weight Profiles" back="#/"></app-header>
         <form class="col">
           <input class="input" type="text" placeholder="Profile name (e.g. Home gym)" />
-          <input class="input barbell" type="number" step="0.5" min="0" placeholder="Barbell kg" />
+          <input class="input barbell" type="number" step="any" min="0" placeholder="Barbell kg" />
           <button class="btn btn-primary" type="submit">Add profile</button>
         </form>
         ${
@@ -67,7 +67,7 @@ export class WeightProfile extends HTMLElement {
         ${p.plates.length ? rows.join('') : '<li class="empty">No plates configured — all default to ∞ when added</li>'}
       </ul>
       <form class="row">
-        <input class="input tiny new-plate" type="number" step="0.5" min="0" placeholder="kg" />
+        <input class="input tiny new-plate" type="number" step="any" min="0" placeholder="kg" />
         <button class="btn btn-primary" type="submit">+ Plate (∞)</button>
       </form>
       <a class="btn btn-start big" href="#/plates?profile=${p.id}">Open calculator</a>`
