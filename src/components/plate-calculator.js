@@ -65,7 +65,7 @@ export class PlateCalculator extends HTMLElement {
                 </ul>`
               : '<p class="empty">Nothing needed (just the bar).</p>'
         }
-        ${r.achievable || r.perSide === null ? '' : `<p class="warn">Not exactly reachable — ${r.leftoverPerSide} kg/side missing with this profile.</p>`}
+        ${r.achievable || r.perSide === null ? '' : `<p class="warn">Not exactly reachable — ${r.leftoverPerSide} kg/side missing with this profile, totaling ${Math.round((profile.barbellKg + r.plates.reduce((sum, p) => sum + p.kg * p.count, 0) * 2) * 100) / 100} kg.</p>`}
         <p class="muted">Barbell: ${profile.barbellKg} kg</p>`
     }
 
