@@ -104,7 +104,7 @@ export class PlanEdit extends ReactiveElement {
       </div>`
   }
 
-  bind() {
+  bind(signal) {
     const saveName = () => {
       const input = this.querySelector('[data-plan-name]')
       const plan = getData().plans.find((p) => p.id === this.getAttribute('plan-id'))
@@ -121,42 +121,46 @@ export class PlanEdit extends ReactiveElement {
       }
     })
 
-    this.addEventListener('click', (e) => {
-      if (e.target.closest('[data-save-name]')) return
-      const planId = this.getAttribute('plan-id')
-      const plan = getData().plans.find((p) => p.id === planId)
-      if (!plan) return
-      const addBtn = e.target.closest('[data-add]')
-      if (addBtn) {
-        // Prevent duplicate adds – the available list already excludes exercises in the plan,
-        // but this guard is a safety net.
-        if (plan.exerciseIds.includes(addBtn.dataset.add)) {
-          // Already in plan – don't add again
-          return
+    this.addEventListener(
+      'click',
+      (e) => {
+        if (e.target.closest('[data-save-name]')) return
+        const planId = this.getAttribute('plan-id')
+        const plan = getData().plans.find((p) => p.id === planId)
+        if (!plan) return
+        const addBtn = e.target.closest('[data-add]')
+        if (addBtn) {
+          // Prevent duplicate adds – the available list already excludes exercises in the plan,
+          // but this guard is a safety net.
+          if (plan.exerciseIds.includes(addBtn.dataset.add)) {
+            // Already in plan – don't add again
+            return
+          }
+          updatePlan(plan.id, { exerciseIds: [...plan.exerciseIds, addBtn.dataset.add] })
         }
-        updatePlan(plan.id, { exerciseIds: [...plan.exerciseIds, addBtn.dataset.add] })
-      }
-      const removeBtn = e.target.closest('[data-remove]')
-      if (removeBtn) updatePlan(plan.id, { exerciseIds: plan.exerciseIds.filter((x) => x !== removeBtn.dataset.remove) })
-      const upBtn = e.target.closest('[data-move-up]')
-      if (upBtn && !upBtn.disabled) {
-        const idx = plan.exerciseIds.indexOf(upBtn.dataset.moveUp)
-        if (idx > 0) {
-          const next = [...plan.exerciseIds]
-          ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-          updatePlan(plan.id, { exerciseIds: next })
+        const removeBtn = e.target.closest('[data-remove]')
+        if (removeBtn) updatePlan(plan.id, { exerciseIds: plan.exerciseIds.filter((x) => x !== removeBtn.dataset.remove) })
+        const upBtn = e.target.closest('[data-move-up]')
+        if (upBtn && !upBtn.disabled) {
+          const idx = plan.exerciseIds.indexOf(upBtn.dataset.moveUp)
+          if (idx > 0) {
+            const next = [...plan.exerciseIds]
+            ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+            updatePlan(plan.id, { exerciseIds: next })
+          }
         }
-      }
-      const downBtn = e.target.closest('[data-move-down]')
-      if (downBtn && !downBtn.disabled) {
-        const idx = plan.exerciseIds.indexOf(downBtn.dataset.moveDown)
-        if (idx !== -1 && idx < plan.exerciseIds.length - 1) {
-          const next = [...plan.exerciseIds]
-          ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
-          updatePlan(plan.id, { exerciseIds: next })
+        const downBtn = e.target.closest('[data-move-down]')
+        if (downBtn && !downBtn.disabled) {
+          const idx = plan.exerciseIds.indexOf(downBtn.dataset.moveDown)
+          if (idx !== -1 && idx < plan.exerciseIds.length - 1) {
+            const next = [...plan.exerciseIds]
+            ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+            updatePlan(plan.id, { exerciseIds: next })
+          }
         }
-      }
-    })
+      },
+      { signal }
+    )
   }
 }
 
