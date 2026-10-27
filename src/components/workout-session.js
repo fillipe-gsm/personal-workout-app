@@ -207,7 +207,7 @@ export class ExerciseSetBlock extends HTMLElement {
           <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
         <form class="workout-start">
-          <input class="input tw" type="number" step="1" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
+          <input class="input tw" type="number" step="any" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
       this.querySelector('form').addEventListener('submit', (e) => {
@@ -236,7 +236,7 @@ export class ExerciseSetBlock extends HTMLElement {
           <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
         <form class="workout-start-acc">
-          <input class="input tw" type="number" step="1" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
+          <input class="input tw" type="number" step="any" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
           <div class="tw-grid">
             <input class="input total" type="number" step="1" min="1" placeholder="Total reps" />
             <input class="input perSet" type="number" step="1" min="1" placeholder="Reps / set" />

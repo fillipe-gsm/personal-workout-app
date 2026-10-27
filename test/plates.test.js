@@ -53,22 +53,25 @@ describe('calcPlates', () => {
       ]
     }
     const r = calcPlates(67.5, profile)
-    expect(r.perSide).toBe(23.5)
-    expect(r.achievable).toBe(true)
+    expect(r.perSide).toBe(23.75)
+    // 23.75/side is not buildable from 10/2/0.5 plates — falls back to the best
+    // below (23.5/side = 67 total) and reports the leftover honestly.
+    expect(r.achievable).toBe(false)
     expect(r.plates).toEqual([
       { kg: 10, count: 2 },
       { kg: 2, count: 1 },
       { kg: 0.5, count: 3 }
     ])
+    expect(r.leftoverPerSide).toBe(0.25)
   })
 
-  it('floors the target weight to integer before calculating (11.5 -> 11)', () => {
+  it('rounds down to the best profile-achievable weight (11.5 with only 5s -> 10)', () => {
     const profile = { barbellKg: 0, plates: [{ kg: 5, count: Infinity }] }
     const r = calcPlates(11.5, profile)
-    expect(r.perSide).toBe(5.5)
+    expect(r.perSide).toBe(5.75)
     expect(r.plates).toEqual([{ kg: 5, count: 1 }])
     expect(loadedWeight(r, profile)).toBe(10)
-    expect(r.leftoverPerSide).toBeCloseTo(0.5)
+    expect(r.leftoverPerSide).toBeCloseTo(0.75)
   })
 
   it('respects limited plate quantities and degrades gracefully', () => {
@@ -113,14 +116,39 @@ describe('calcPlates', () => {
     expect(r.achievable).toBe(true)
   })
 
-  it('never loads above the floored target', () => {
+  it('never loads above the target, including fractional targets', () => {
     const targets = [21, 33, 47.9, 62.5, 87.3]
     for (const t of targets) {
       const r = calcPlates(t, stdProfile)
       if (r.perSide !== null && r.achievable) {
-        expect(loadedWeight(r, stdProfile)).toBeLessThanOrEqual(Math.floor(t))
+        expect(loadedWeight(r, stdProfile)).toBeLessThanOrEqual(t)
       }
     }
+  })
+
+  it('loads fractional 1.25 kg plates exactly when the profile allows it', () => {
+    const profile = { barbellKg: 0, plates: [{ kg: 5, count: 4 }, { kg: 1.25, count: Infinity }] }
+    const r = calcPlates(30, profile)
+    expect(r.perSide).toBe(15)
+    expect(r.achievable).toBe(true)
+    expect(r.plates).toEqual([
+      { kg: 5, count: 2 },
+      { kg: 1.25, count: 4 }
+    ])
+    expect(loadedWeight(r, profile)).toBe(30)
+    expect(r.leftoverPerSide).toBe(0)
+  })
+
+  it('mixes 2.5 kg increments cleanly (65 kg = bar + 20 + 2.5 per side)', () => {
+    const profile = { barbellKg: 20, plates: [{ kg: 20, count: 2 }, { kg: 2.5, count: 2 }] }
+    const r = calcPlates(65, profile)
+    expect(r.achievable).toBe(true)
+    expect(r.plates).toEqual([
+      { kg: 20, count: 1 },
+      { kg: 2.5, count: 1 }
+    ])
+    expect(loadedWeight(r, profile)).toBe(65)
+    expect(r.leftoverPerSide).toBe(0)
   })
 
   it('finds the optimal solution where greedy fails (26kg, bar 8kg, plates 2/3/5)', () => {

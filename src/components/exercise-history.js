@@ -20,7 +20,7 @@ export class ExerciseHistory extends ReactiveElement {
       <div class="screen">
         <app-header title="History: ${esc(exercise.name)}" back="#/"></app-header>
         <div class="card hist-filter">
-          <input class="input" data-filter-weight type="number" step="1" min="0" placeholder="Filter by ${bw ? 'extra' : 'training'} weight (kg)" value="${filter ?? ''}" />
+          <input class="input" data-filter-weight type="number" step="any" min="0" placeholder="Filter by ${bw ? 'extra' : 'training'} weight (kg)" value="${filter ?? ''}" />
           <button class="btn btn-small" data-clear-filter ${filter == null ? 'disabled' : ''}>Clear</button>
         </div>
         <p class="muted" data-count>${esc(view.countText)}</p>

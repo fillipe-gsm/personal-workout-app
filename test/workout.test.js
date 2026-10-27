@@ -27,18 +27,18 @@ function createPlanWithExercise(exerciseName = 'Squat') {
 }
 
 describe('workout training weight input', () => {
-  it('has step=1 so any integer weight is valid', () => {
+  it('allows any value (step=any), integers and decimals alike', () => {
     const { plan } = createPlanWithExercise()
     const session = document.createElement('workout-session')
     session.setAttribute('plan-id', plan.id)
     document.body.append(session)
 
     const twInput = document.querySelector('exercise-set-block .tw')
-    expect(twInput.step).toBe('1')
+    expect(twInput.step).toBe('any')
 
-    for (const val of ['77', '73', '81', '100', '1']) {
+    for (const val of ['77', '73', '81', '100', '1', '42.5', '47.25', '0.5']) {
       twInput.value = val
-      expect(twInput.validity.valid, `value ${val} should be valid with step=1`).toBe(true)
+      expect(twInput.validity.valid, `value ${val} should be valid with step=any`).toBe(true)
     }
   })
 
@@ -66,6 +66,24 @@ describe('workout training weight input', () => {
 
     const rows = block.querySelectorAll('.set-row')
     expect(rows).toHaveLength(6)
+  })
+
+  it('accepts decimal TW like 42.5 and rounds down to the last integer', async () => {
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    const form = block.querySelector('form')
+    const twInput = block.querySelector('.tw')
+
+    twInput.value = '42.5'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(block.sets).toHaveLength(6)
+    expect(block.sets.slice(3).map((s) => s.weightKg)).toEqual([42.5, 42.5, 42.5])
   })
 
   it('accepts 73 and generates correct warm-ups', async () => {

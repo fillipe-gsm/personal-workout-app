@@ -12,8 +12,7 @@ function isBetter(candidate, existing) {
 }
 
 export function calcPlates(targetKg, profile) {
-  const flooredTarget = Math.floor(targetKg)
-  const perSideTarget = (flooredTarget - profile.barbellKg) / 2
+  const perSideTarget = (targetKg - profile.barbellKg) / 2
   if (perSideTarget < 0) {
     return { achievable: false, perSide: null, plates: [], leftoverPerSide: null }
   }
