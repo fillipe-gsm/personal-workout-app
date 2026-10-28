@@ -122,10 +122,13 @@ select.input { width: 100%; }
 .ex-actions { display: flex; gap: 6px; flex: 0 0 auto; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .ex-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ex-controls .input { width: 100%; min-width: 0; padding: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field-label { color: var(--muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; padding-left: 2px; }
 .ex-add-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px; }
 .ex-add-form > .input[type="text"] { width: 100%; }
-.ex-add-controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; }
+.ex-add-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ex-add-controls .input, .ex-add-controls .btn { width: 100%; min-width: 0; }
+.ex-add-controls .btn-primary { grid-column: 1 / -1; }
 .ex-edit { display: flex; flex-direction: column; gap: 10px; }
 .ex-edit > .input { width: 100%; }
 .ex-edit-actions { display: flex; gap: 8px; }
@@ -140,7 +143,6 @@ select.input { width: 100%; }
   .ex-add-controls { grid-template-columns: 1fr 1fr; }
   .ex-add-controls .btn-primary { grid-column: 1 / -1; }
 }
-
 .workout-progress {
   display: flex;
   align-items: center;
@@ -167,8 +169,10 @@ select.input { width: 100%; }
 .workout-nav { display: flex; gap: 8px; margin-top: 12px; }
 .workout-nav .btn { flex: 1; }
 .workout-nav .btn:disabled { opacity: 0.4; cursor: default; }
-.workout-start { display: flex; gap: 8px; align-items: center; }
+.workout-start { display: flex; gap: 8px; align-items: flex-end; }
 .workout-start .tw { flex: 1; }
+.workout-start .worksets-field { flex: 0 0 auto; }
+.workout-start .worksets { width: 92px; }
 .workout-start-acc { display: flex; flex-direction: column; gap: 8px; }
 .workout-start-acc .tw { width: 100%; }
 .tw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

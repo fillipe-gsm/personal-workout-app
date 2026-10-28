@@ -1,4 +1,4 @@
-import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isBodyweight, isMain } from '../store.js'
+import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isBodyweight, isFixedSets, fmtSetScheme } from '../store.js'
 import { warmupWeights } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
@@ -113,13 +113,12 @@ export class WorkoutSession extends HTMLElement {
           block.suggestedReps = entry.suggestedReps ?? null
         } else if (entry.tw != null) {
           const tw = entry.tw
-          const isMainEx = isMain(block.exercise)
-          block.sets = isMainEx
-            ? [
-                ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
-                ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
-              ]
-            : Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
+          const scheme = block.exercise.setScheme
+          const works = isFixedSets(block.exercise) ? scheme.workSets : 3
+          block.sets = [
+            ...warmupWeights(tw, scheme.warmupCount).map((weightKg) => ({ type: 'warmup', weightKg })),
+            ...Array.from({ length: works }, () => ({ type: 'working', weightKg: tw }))
+          ]
           block.note = entry.note || ''
           block.suggestedReps = entry.suggestedReps ?? null
         } else continue
@@ -197,27 +196,34 @@ export class ExerciseSetBlock extends HTMLElement {
 
   renderInput() {
     this.className = 'card'
-    const isMainEx = isMain(this.exercise)
-    const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
-    if (isMainEx) {
-      const bw = isBodyweight(this.exercise)
+    const fixedSets = isFixedSets(this.exercise)
+    const scheme = this.exercise.setScheme
+    const schemeBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(fmtSetScheme(scheme))}</small>`
+    const bw = isBodyweight(this.exercise)
+    const twPlaceholder = bw ? 'Extra weight (kg)' : 'Training weight (kg)'
+    if (fixedSets) {
       this.innerHTML = `
         <div class="card-title">
-          <span>${esc(this.exercise.name)} ${tierBadge}</span>
+          <span>${esc(this.exercise.name)} ${schemeBadge}</span>
           <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
         <form class="workout-start">
-          <input class="input tw" type="number" step="any" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
+          <input class="input tw" type="number" step="any" min="0" placeholder="${twPlaceholder}" />
+          <label class="field worksets-field">
+            <span class="field-label">Work sets</span>
+            <input class="input worksets" type="number" step="1" min="1" value="${scheme.workSets}" />
+          </label>
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
       this.querySelector('form').addEventListener('submit', (e) => {
         e.preventDefault()
         const raw = e.target.querySelector('.tw').value
         const tw = raw.trim() === '' && bw ? 0 : parseFloat(raw)
-        if (Number.isNaN(tw) || tw < 0 || (!bw && tw <= 0)) return
+        const workSets = parseInt(e.target.querySelector('.worksets').value, 10)
+        if (Number.isNaN(tw) || tw < 0 || (!bw && tw <= 0) || !workSets || workSets < 1) return
         this.sets = [
-          ...warmupWeights(tw).map((weightKg) => ({ type: 'warmup', weightKg })),
-          ...Array.from({ length: 3 }, () => ({ type: 'working', weightKg: tw }))
+          ...warmupWeights(tw, scheme.warmupCount).map((weightKg) => ({ type: 'warmup', weightKg })),
+          ...Array.from({ length: workSets }, () => ({ type: 'working', weightKg: tw }))
         ]
         this.note = ''
         this.saved = false
@@ -229,17 +235,22 @@ export class ExerciseSetBlock extends HTMLElement {
         }
       })
     } else {
-      const bw = isBodyweight(this.exercise)
       this.innerHTML = `
         <div class="card-title">
-          <span>${esc(this.exercise.name)} ${tierBadge}</span>
+          <span>${esc(this.exercise.name)} ${schemeBadge}</span>
           <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
         </div>
         <form class="workout-start-acc">
-          <input class="input tw" type="number" step="any" min="0" placeholder="${bw ? 'Extra weight (kg)' : 'Training weight (kg)'}" />
+          <input class="input tw" type="number" step="any" min="0" placeholder="${twPlaceholder}" />
           <div class="tw-grid">
-            <input class="input total" type="number" step="1" min="1" placeholder="Total reps" />
-            <input class="input perSet" type="number" step="1" min="1" placeholder="Reps / set" />
+            <label class="field">
+              <span class="field-label">Total reps</span>
+              <input class="input total" type="number" step="1" min="1" value="${scheme.totalReps}" placeholder="Total reps" />
+            </label>
+            <label class="field">
+              <span class="field-label">Reps / set</span>
+              <input class="input perSet" type="number" step="1" min="1" placeholder="Reps / set" />
+            </label>
           </div>
           <button class="btn btn-primary" type="submit">Start</button>
         </form>`
@@ -252,7 +263,10 @@ export class ExerciseSetBlock extends HTMLElement {
         if (Number.isNaN(tw) || tw < 0 || (!bw && tw <= 0) || !total || total <= 0 || !perSet || perSet <= 0) return
         const count = Math.max(1, Math.floor(total / perSet))
         this.suggestedReps = perSet
-        this.sets = Array.from({ length: count }, () => ({ type: 'working', weightKg: tw, reps: null }))
+        this.sets = [
+          ...warmupWeights(tw, scheme.warmupCount).map((weightKg) => ({ type: 'warmup', weightKg })),
+          ...Array.from({ length: count }, () => ({ type: 'working', weightKg: tw, reps: null }))
+        ]
         this.note = ''
         this.saved = false
         this.renderSets()
@@ -267,7 +281,7 @@ export class ExerciseSetBlock extends HTMLElement {
 
   renderSets() {
     const bb = isBarbell(this.exercise)
-    const isMainEx = isMain(this.exercise)
+    const fixedSets = isFixedSets(this.exercise)
     const rows = this.sets.map((set, i) => {
       const warmupsSoFar = this.sets.slice(0, i).filter((s) => s.type === 'warmup').length
       const label =
@@ -276,7 +290,7 @@ export class ExerciseSetBlock extends HTMLElement {
           : set.type === 'extra'
             ? 'Extra working set'
             : `Working set ${this.sets.slice(0, i).filter((s) => s.type === 'working').length + 1}`
-      const ph = !isMainEx && this.suggestedReps != null ? this.suggestedReps : 'reps'
+      const ph = !fixedSets && this.suggestedReps != null ? this.suggestedReps : 'reps'
       return `
         <div class="set-row">
           <span class="set-label ${set.type}">${label}</span>
@@ -285,10 +299,10 @@ export class ExerciseSetBlock extends HTMLElement {
           ${bb ? `<a class="btn btn-small" href="#/plates?weight=${set.weightKg}">Plates</a>` : ''}
         </div>`
     })
-    const tierBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(this.exercise.tier || 'main')}</small>`
+    const schemeBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(fmtSetScheme(this.exercise.setScheme))}</small>`
     this.innerHTML = `
       <div class="card-title">
-        <span>${esc(this.exercise.name)} ${tierBadge}</span>
+        <span>${esc(this.exercise.name)} ${schemeBadge}</span>
         <a class="btn btn-small" href="#/history/${this.exercise.id}">Last records</a>
       </div>
       ${rows.join('')}

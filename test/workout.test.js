@@ -58,9 +58,9 @@ describe('workout training weight input', () => {
 
     expect(block.sets).toHaveLength(6)
     expect(block.sets.map((s) => s.weightKg)).toEqual([
-      Math.floor(77 * 0.4),
-      Math.floor(77 * 0.6),
-      Math.floor(77 * 0.8),
+      Math.floor((77 * 1) / 4),
+      Math.floor((77 * 2) / 4),
+      Math.floor((77 * 3) / 4),
       77, 77, 77
     ])
 
@@ -98,9 +98,9 @@ describe('workout training weight input', () => {
     await Promise.resolve()
 
     expect(block.sets.slice(0, 3).map((s) => s.weightKg)).toEqual([
-      Math.floor(73 * 0.4),
-      Math.floor(73 * 0.6),
-      Math.floor(73 * 0.8)
+      Math.floor((73 * 1) / 4),
+      Math.floor((73 * 2) / 4),
+      Math.floor((73 * 3) / 4)
     ])
   })
 
@@ -174,9 +174,9 @@ describe('workout training weight input', () => {
     const block2 = document.querySelector('exercise-set-block')
     expect(block2.sets).toHaveLength(6)
     expect(block2.sets.map((s) => s.weightKg)).toEqual([
-      Math.floor(77 * 0.4),
-      Math.floor(77 * 0.6),
-      Math.floor(77 * 0.8),
+      Math.floor((77 * 1) / 4),
+      Math.floor((77 * 2) / 4),
+      Math.floor((77 * 3) / 4),
       77, 77, 77
     ])
     expect(block2.querySelectorAll('.set-row')).toHaveLength(6)
@@ -329,7 +329,7 @@ describe('workout training weight input', () => {
     expect(rec.note).toBe('This was hard')
   })
 
-  describe('exercise classes and tiers', () => {
+  describe('exercise classes and set schemes', () => {
     it('main always has warm-ups (regardless of category), accessory has none', async () => {
       const mainBarbell = store.addExercise('Squat', 'Barbell', 'main')
       const mainBW = store.addExercise('Push-up', 'Bodyweight', 'main')
@@ -476,6 +476,7 @@ describe('workout training weight input', () => {
 
       const block = document.querySelector('exercise-set-block')
       block.querySelector('.tw').value = '20'
+      expect(block.querySelector('.total').value).toBe('15')
       block.querySelector('.total').value = '45'
       block.querySelector('.perSet').value = '5'
       block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
@@ -579,6 +580,76 @@ describe('workout training weight input', () => {
       block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
       await Promise.resolve()
       expect(block.sets).toHaveLength(0)
+    })
+
+    it('fixed sets: uses the scheme warm-up count and prefills the work set count', async () => {
+      const ex = store.addExercise('Squat', 'Barbell', { type: 'fixedSets', warmupCount: 1, workSets: 5 })
+      const plan = store.addPlan('SetsPlan')
+      store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      expect(block.querySelector('.worksets-field .field-label').textContent).toBe('Work sets')
+      expect(block.querySelector('.worksets').value).toBe('5')
+
+      block.querySelector('.tw').value = '100'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      expect(block.sets.map((s) => s.type)).toEqual([
+        'warmup', 'working', 'working', 'working', 'working', 'working'
+      ])
+      expect(block.sets[0].weightKg).toBe(50) // one warm-up at 50%
+      expect(block.sets.slice(1).every((s) => s.weightKg === 100)).toBe(true)
+    })
+
+    it('fixed sets: the work set count can be overridden per workout', async () => {
+      const ex = store.addExercise('Squat', 'Barbell', { type: 'fixedSets', warmupCount: 0, workSets: 5 })
+      const plan = store.addPlan('SetsOverride')
+      store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      block.querySelector('.tw').value = '100'
+      block.querySelector('.worksets').value = '2'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      // no warm-ups configured, and the override wins over the stored 5
+      expect(block.sets).toHaveLength(2)
+      expect(block.sets.every((s) => s.type === 'working' && s.weightKg === 100)).toBe(true)
+    })
+
+    it('fixed reps: prefills total reps from the scheme and honors warm-ups', async () => {
+      const ex = store.addExercise('Curl', 'Dumbbell', { type: 'fixedReps', warmupCount: 2, totalReps: 40 })
+      const plan = store.addPlan('RepsPlan')
+      store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      expect(block.querySelector('.total').value).toBe('40')
+      expect([...block.querySelectorAll('.tw-grid .field-label')].map((l) => l.textContent)).toEqual([
+        'Total reps',
+        'Reps / set'
+      ])
+
+      block.querySelector('.tw').value = '30'
+      block.querySelector('.perSet').value = '10'
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      // 2 warm-ups (33% / 66% of 30) + 4 work sets for 40 total reps
+      expect(block.sets.map((s) => s.type)).toEqual([
+        'warmup', 'warmup', 'working', 'working', 'working', 'working'
+      ])
+      expect(block.sets.slice(0, 2).map((s) => s.weightKg)).toEqual([10, 20])
+      expect(block.suggestedReps).toBe(10)
     })
   })
 

@@ -47,6 +47,59 @@ describe('exercises', () => {
   })
 })
 
+describe('set schemes', () => {
+  it('new exercises default to fixed sets: 3 warm-ups + 3 work sets', () => {
+    const ex = store.addExercise('Squat')
+    expect(ex.setScheme).toEqual({ type: 'fixedSets', warmupCount: 3, workSets: 3 })
+    expect(ex.tier).toBeUndefined()
+  })
+
+  it('defaults fixed reps to 0 warm-ups and 15 total reps', () => {
+    const ex = store.addExercise('Curl', 'Dumbbell', 'fixedReps')
+    expect(ex.setScheme).toEqual({ type: 'fixedReps', warmupCount: 0, totalReps: 15 })
+  })
+
+  it('stores and normalizes an explicit scheme', () => {
+    const ex = store.addExercise('Bench', 'Barbell', { type: 'fixedReps', warmupCount: 2, totalReps: 32 })
+    expect(ex.setScheme).toEqual({ type: 'fixedReps', warmupCount: 2, totalReps: 32 })
+    store.updateExercise(ex.id, { setScheme: { type: 'fixedSets', warmupCount: 1, workSets: 4 } })
+    expect(store.getExercise(ex.id).setScheme).toEqual({ type: 'fixedSets', warmupCount: 1, workSets: 4 })
+  })
+
+  it('clamps invalid scheme values', () => {
+    const ex = store.addExercise('X')
+    store.updateExercise(ex.id, { setScheme: { type: 'fixedReps', warmupCount: -2, totalReps: 0 } })
+    expect(store.getExercise(ex.id).setScheme).toEqual({ type: 'fixedReps', warmupCount: 0, totalReps: 15 })
+  })
+
+  it('migrates legacy tiers from saved data: main → 3+3 sets, accessory → 15 reps', async () => {
+    storage.set(
+      'workout-app-data',
+      JSON.stringify({
+        exercises: [
+          { id: 'm', name: 'Squat', category: 'Barbell', tier: 'main' },
+          { id: 'a', name: 'Curl', category: 'Dumbbell', tier: 'accessory' }
+        ],
+        plans: [],
+        profiles: [],
+        records: []
+      })
+    )
+    vi.resetModules()
+    const fresh = await import('../src/store.js')
+
+    expect(fresh.getExercise('m').setScheme).toEqual({ type: 'fixedSets', warmupCount: 3, workSets: 3 })
+    expect(fresh.getExercise('a').setScheme).toEqual({ type: 'fixedReps', warmupCount: 0, totalReps: 15 })
+    expect(fresh.getExercise('m').tier).toBeUndefined()
+  })
+
+  it('describes schemes for badges', () => {
+    expect(store.fmtSetScheme({ type: 'fixedSets', warmupCount: 3, workSets: 3 })).toBe('3 work sets + 3 WU')
+    expect(store.fmtSetScheme({ type: 'fixedSets', warmupCount: 0, workSets: 5 })).toBe('5 work sets')
+    expect(store.fmtSetScheme({ type: 'fixedReps', warmupCount: 0, totalReps: 15 })).toBe('15 total reps')
+  })
+})
+
 describe('plans', () => {
   it('creates a plan with empty exercise list', () => {
     const plan = store.addPlan('Legs')

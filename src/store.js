@@ -20,10 +20,40 @@ function normalizeCategory(c) {
   return CATEGORY_ALIASES[c] || c
 }
 
-export const EXERCISE_TIERS = ['main', 'accessory']
+export const SET_SCHEME_TYPES = ['fixedSets', 'fixedReps']
 
-function normalizeTier(t) {
-  return t === 'accessory' ? 'accessory' : 'main'
+export const DEFAULT_WARMUP_COUNT = 3
+export const DEFAULT_WORK_SETS = 3
+export const DEFAULT_TOTAL_REPS = 15
+
+function intOr(value, min, fallback) {
+  const n = Math.floor(Number(value))
+  return Number.isFinite(n) && n >= min ? n : fallback
+}
+
+// Accepts a stored/received setScheme and returns a normalized one. Legacy
+// exercises only had a `tier`: main → fixed sets (3 warm-ups + 3 work sets),
+// accessory → fixed reps (no warm-ups, 15 total reps).
+export function normalizeSetScheme(input, legacyTier) {
+  const raw = input && typeof input === 'object' ? input : null
+  let type = raw?.type
+  if (type !== 'fixedSets' && type !== 'fixedReps') {
+    type = SET_SCHEME_TYPES.includes(legacyTier)
+      ? legacyTier
+      : legacyTier === 'accessory'
+        ? 'fixedReps'
+        : 'fixedSets'
+  }
+  const warmupFallback = type === 'fixedSets' ? DEFAULT_WARMUP_COUNT : 0
+  const warmupCount = intOr(raw?.warmupCount, 0, warmupFallback)
+  if (type === 'fixedReps') {
+    return { type, warmupCount, totalReps: intOr(raw?.totalReps, 1, DEFAULT_TOTAL_REPS) }
+  }
+  return { type, warmupCount, workSets: intOr(raw?.workSets, 1, DEFAULT_WORK_SETS) }
+}
+
+export function defaultSetScheme(type = 'fixedSets') {
+  return normalizeSetScheme({ type })
 }
 
 function normalize(d) {
@@ -36,7 +66,8 @@ function normalize(d) {
   for (const ex of d.exercises) {
     ex.category = normalizeCategory(ex.category)
     if (!ex.category || !EXERCISE_CLASSES.includes(ex.category)) ex.category = 'Barbell'
-    ex.tier = normalizeTier(ex.tier)
+    ex.setScheme = normalizeSetScheme(ex.setScheme, ex.tier)
+    delete ex.tier
   }
   return d
 }
@@ -49,8 +80,21 @@ export function isBodyweight(exercise) {
   return exercise?.category === 'Bodyweight'
 }
 
-export function isMain(exercise) {
-  return normalizeTier(exercise?.tier) === 'main'
+export function isFixedSets(exercise) {
+  return normalizeSetScheme(exercise?.setScheme).type === 'fixedSets'
+}
+
+export function isFixedReps(exercise) {
+  return normalizeSetScheme(exercise?.setScheme).type === 'fixedReps'
+}
+
+// Human-readable setScheme summary for badges/labels.
+export function fmtSetScheme(scheme) {
+  const s = normalizeSetScheme(scheme)
+  const warmups = s.warmupCount > 0 ? ` + ${s.warmupCount} WU` : ''
+  return s.type === 'fixedReps'
+    ? `${s.totalReps} total reps${warmups}`
+    : `${s.workSets} work sets${warmups}`
 }
 
 export function load() {
@@ -85,11 +129,12 @@ export function clearAllData() {
   save()
 }
 
-export function addExercise(name, category = 'Barbell', tier = 'main') {
+export function addExercise(name, category = 'Barbell', setScheme = null) {
   category = normalizeCategory(category)
   if (!EXERCISE_CLASSES.includes(category)) category = 'Barbell'
-  tier = normalizeTier(tier)
-  const ex = { id: uid(), name: name.trim(), category, tier }
+  // Also accepts legacy 'main'/'accessory' tier strings for convenience.
+  const legacyTier = typeof setScheme === 'string' ? setScheme : undefined
+  const ex = { id: uid(), name: name.trim(), category, setScheme: normalizeSetScheme(setScheme, legacyTier) }
   data.exercises.push(ex)
   save()
   return ex
@@ -100,7 +145,11 @@ export function updateExercise(id, patch) {
   if (ex) {
     if (patch.category) patch.category = normalizeCategory(patch.category)
     if (patch.category && !EXERCISE_CLASSES.includes(patch.category)) patch.category = 'Barbell'
-    if (patch.tier) patch.tier = normalizeTier(patch.tier)
+    if ('tier' in patch) {
+      if (!patch.setScheme) patch.setScheme = normalizeSetScheme(null, patch.tier)
+      delete patch.tier
+    }
+    if (patch.setScheme) patch.setScheme = normalizeSetScheme(patch.setScheme)
     Object.assign(ex, patch)
     save()
   }

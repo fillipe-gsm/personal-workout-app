@@ -129,6 +129,55 @@ describe('exercises screen', () => {
     expect(document.querySelector('.badge').textContent).toBe('Bodyweight')
   })
 
+  it('creates fixed-sets exercises by default (3 warm-ups + 3 work sets)', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('Squat')
+
+    expect(store.getData().exercises[0].setScheme).toEqual({ type: 'fixedSets', warmupCount: 3, workSets: 3 })
+    expect(document.querySelectorAll('.badge')[1].textContent).toBe('3 work sets + 3 WU')
+    expect(document.querySelector('[data-new-scheme-value-label]').textContent).toBe('Work sets')
+    expect(document.querySelector('.field-label').textContent).toBe('Warm-up sets')
+  })
+
+  it('adds a fixed-reps exercise via the form and updates the value field', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    const form = document.querySelector('exercise-list form')
+    const typeSelect = form.querySelector('[data-new-scheme-type]')
+    const valueInput = form.querySelector('[data-new-scheme-value]')
+
+    form.querySelector('input[type="text"]').value = 'Curl'
+    typeSelect.value = 'fixedReps'
+    typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(valueInput.placeholder).toBe('Total reps')
+    expect(valueInput.value).toBe('15')
+    expect(form.querySelector('[data-new-scheme-value-label]').textContent).toBe('Total reps')
+
+    form.querySelector('[data-new-warmups]').value = '1'
+    valueInput.value = '30'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(store.getData().exercises[0].setScheme).toEqual({ type: 'fixedReps', warmupCount: 1, totalReps: 30 })
+  })
+
+  it('edits the set scheme via Edit and Save', async () => {
+    document.body.append(document.createElement('exercise-list'))
+    await submitNewExercise('Squat')
+    document.querySelector('[data-edit]').click()
+    await Promise.resolve()
+
+    const typeSel = document.querySelector('[data-edit-scheme-type]')
+    typeSel.value = 'fixedReps'
+    typeSel.dispatchEvent(new Event('change', { bubbles: true }))
+    document.querySelector('[data-edit-warmups]').value = '2'
+    document.querySelector('[data-edit-scheme-value]').value = '30'
+    document.querySelector('[data-save]').click()
+    await Promise.resolve()
+
+    expect(store.getData().exercises[0].setScheme).toEqual({ type: 'fixedReps', warmupCount: 2, totalReps: 30 })
+    expect(document.querySelectorAll('.badge')[1].textContent).toBe('30 total reps + 2 WU')
+  })
+
   it('handles Dumbbel typo as Dumbbell', async () => {
     const ex = store.addExercise('Curl', 'Dumbbel')
     expect(ex.category).toBe('Dumbbell')

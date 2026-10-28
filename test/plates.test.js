@@ -18,16 +18,28 @@ function loadedWeight(result, profile) {
 }
 
 describe('warmupWeights', () => {
-  it('generates 40/60/80% floored to integer', () => {
-    expect(warmupWeights(80)).toEqual([32, 48, 64])
+  it('spaces 3 warm-ups evenly between 0% and 100%: 25/50/75%, floored', () => {
+    expect(warmupWeights(80)).toEqual([20, 40, 60])
   })
 
   it('floors fractional warm-up weights down', () => {
-    expect(warmupWeights(57)).toEqual([22, 34, 45])
+    expect(warmupWeights(57)).toEqual([14, 28, 42])
   })
 
   it('handles small training weights', () => {
-    expect(warmupWeights(10)).toEqual([4, 6, 8])
+    expect(warmupWeights(10)).toEqual([2, 5, 7])
+  })
+
+  it('spaces a single warm-up at 50%', () => {
+    expect(warmupWeights(80, 1)).toEqual([40])
+  })
+
+  it('spaces 2 warm-ups at 33% and 66%', () => {
+    expect(warmupWeights(75, 2)).toEqual([25, 50])
+  })
+
+  it('returns no warm-ups when the count is 0', () => {
+    expect(warmupWeights(80, 0)).toEqual([])
   })
 })
 

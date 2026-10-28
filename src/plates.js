@@ -1,5 +1,13 @@
-export function warmupWeights(twKg) {
-  return [0.4, 0.6, 0.8].map((pct) => Math.floor(twKg * pct))
+// Warm-up weights are evenly spaced percentages of the training weight between
+// 0% and 100%, excluding both ends: 1 warm-up → 50%; 2 → 33%, 66%; 3 → 25%, 50%, 75%.
+export function warmupWeights(twKg, count = 3) {
+  const n = intOrCount(count)
+  return Array.from({ length: n }, (_, i) => Math.floor((twKg * (i + 1)) / (n + 1)))
+}
+
+function intOrCount(value) {
+  const n = Math.floor(Number(value))
+  return Number.isFinite(n) && n > 0 ? n : 0
 }
 
 function isBetter(candidate, existing) {
