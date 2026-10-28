@@ -39,6 +39,11 @@ function order(plan) {
   return planById(plan).exerciseIds.map((id) => store.getExercise(id).name)
 }
 
+function entryId(plan, exerciseName) {
+  const entry = planById(plan).entries.find((e) => store.getExercise(e.exerciseId)?.name === exerciseName)
+  return entry?.id
+}
+
 function clickMove(el, dir, id) {
   const btn = el.querySelector(`[data-move-${dir}="${id}"]`)
   btn.click()
@@ -48,11 +53,10 @@ function clickMove(el, dir, id) {
 describe('plan exercise reordering', () => {
   it('moves one position per click, not to the end of the list', () => {
     const plan = createPlanExercise('First', 'Second', 'Third', 'Fourth')
-    const ids = planById(plan).exerciseIds
     const el = showPlanEdit(plan.id)
 
     // Click "down" on the first exercise: should only swap with the second.
-    clickMove(el, 'down', ids[0])
+    clickMove(el, 'down', entryId(plan, 'First'))
     expect(order(plan)).toEqual(['Second', 'First', 'Third', 'Fourth'])
   })
 
@@ -64,8 +68,7 @@ describe('plan exercise reordering', () => {
     // would produce (the guard at the end of the list would hide it).
     const plan = createPlanExercise('First', 'Second', 'Third', 'Fourth')
     const el = showPlanEdit(plan.id)
-    const ids = planById(plan).exerciseIds
-    const first = ids[0]
+    const first = entryId(plan, 'First')
 
     clickMove(el, 'down', first) // [Second, First, Third, Fourth] — plain one-step swap
     store.updatePlan(plan.id, { name: 'Renamed' }) // forces a repaint (stacks a 2nd listener in the buggy version)
@@ -77,8 +80,7 @@ describe('plan exercise reordering', () => {
   it('moves up only one position per click and disables at the edges', () => {
     const plan = createPlanExercise('First', 'Second', 'Third')
     const el = showPlanEdit(plan.id)
-    const ids = planById(plan).exerciseIds
-    const second = ids[1]
+    const second = entryId(plan, 'Second')
 
     clickMove(el, 'up', second)
     expect(order(plan)).toEqual(['Second', 'First', 'Third'])
@@ -90,13 +92,38 @@ describe('plan exercise reordering', () => {
   it('removing and adding exercises still works alongside reordering', () => {
     const plan = createPlanExercise('Alpha', 'Beta')
     const el = showPlanEdit(plan.id)
-    const ids = planById(plan).exerciseIds
 
-    el.querySelector(`[data-remove="${ids[0]}"]`).click()
+    el.querySelector(`[data-remove="${entryId(plan, 'Alpha')}"]`).click()
     expect(order(plan)).toEqual(['Beta'])
 
     const extra = store.addExercise('Gamma')
     el.querySelector(`[data-add="${extra.id}"]`).click()
     expect(order(plan)).toEqual(['Beta', 'Gamma'])
+  })
+
+  it('edits the set scheme of a plan slot without touching the exercise default', () => {
+    const plan = createPlanExercise('Squat')
+    const el = showPlanEdit(plan.id)
+    const id = entryId(plan, 'Squat')
+
+    el.querySelector(`[data-scheme="${id}"]`).click()
+    const editor = el.querySelector('[data-editor]')
+    expect(editor).toBeTruthy()
+
+    const typeSelect = editor.querySelector('[data-editor-type]')
+    typeSelect.value = 'fixedReps'
+    typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    editor.querySelector('[data-editor-warmups]').value = '2'
+    editor.querySelector('[data-editor-value]').value = '30'
+    editor.querySelector('[data-editor-save]').click()
+
+    expect(planById(plan).getEntry(id).setScheme.toJSON()).toEqual({
+      type: 'fixedReps',
+      warmupCount: 2,
+      totalReps: 30
+    })
+    // The catalog default is untouched.
+    const ex = store.getExercise(planById(plan).entries[0].exerciseId)
+    expect(ex.setScheme.toJSON()).toEqual({ type: 'fixedSets', warmupCount: 3, workSets: 3 })
   })
 })

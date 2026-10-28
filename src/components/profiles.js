@@ -1,10 +1,10 @@
-import { getData, addProfile, updateProfile, deleteProfile, getProfile } from '../store.js'
+import { getProfiles, addProfile, updateProfile, deleteProfile, getProfile } from '../store.js'
 import { ReactiveElement, esc } from './base.js'
 import './header.js'
 
 export class ProfilePage extends ReactiveElement {
   connectedCallback() {
-    const profiles = getData().profiles
+    const profiles = getProfiles()
     const id = this.getAttribute('profile-id')
     const idx = id ? profiles.findIndex((p) => p.id === id) : 0
     this.index = idx > 0 ? idx : 0
@@ -13,7 +13,7 @@ export class ProfilePage extends ReactiveElement {
   }
 
   template() {
-    const profiles = getData().profiles
+    const profiles = getProfiles()
     this.index = Math.max(0, Math.min(profiles.length - 1, this.index ?? 0))
     const addButton = '<a class="btn btn-primary big" href="#/profiles/add">+ Add profile</a>'
     if (!profiles.length) {
@@ -58,10 +58,10 @@ export class ProfilePage extends ReactiveElement {
     })
 
     this.querySelector('weight-profile')?.addEventListener('delete-request', () => {
-      const profile = getData().profiles[this.index]
+      const profile = getProfiles()[this.index]
       if (!profile || !confirm(`Delete profile "${profile.name}"?`)) return
       deleteProfile(profile.id)
-      const remaining = getData().profiles
+      const remaining = getProfiles()
       this.index = Math.max(0, Math.min(this.index, remaining.length - 1))
       this.syncUrl()
       this.rerender()
@@ -103,7 +103,7 @@ export class ProfilePage extends ReactiveElement {
   }
 
   show(i) {
-    const profiles = getData().profiles
+    const profiles = getProfiles()
     if (!profiles.length) return
     const next = Math.max(0, Math.min(profiles.length - 1, i))
     if (next === this.index) return
@@ -113,7 +113,7 @@ export class ProfilePage extends ReactiveElement {
   }
 
   syncUrl() {
-    const profiles = getData().profiles
+    const profiles = getProfiles()
     const path = profiles.length ? `#/profiles/${profiles[this.index].id}` : '#/profiles'
     if (location.hash !== path) history.replaceState(null, '', path)
   }

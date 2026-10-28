@@ -651,6 +651,49 @@ describe('workout training weight input', () => {
       expect(block.sets.slice(0, 2).map((s) => s.weightKg)).toEqual([10, 20])
       expect(block.suggestedReps).toBe(10)
     })
+
+    it('uses the plan slot scheme over the exercise default and snapshots it on save', async () => {
+      const ex = store.addExercise('Squat', 'Barbell') // default: 3 warm-ups + 3 work sets
+      const plan = store.addPlan('PlanScheme')
+      const entry = store.addExerciseToPlan(plan.id, ex.id, {
+        type: 'fixedSets',
+        warmupCount: 1,
+        workSets: 4
+      })
+
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      expect(block.querySelector('.worksets').value).toBe('4')
+
+      block.querySelector('.tw').value = '100'
+      block.querySelector('.worksets').value = '2' // per-workout override
+      block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+
+      expect(block.sets).toHaveLength(3) // 1 warm-up + 2 work sets
+      expect(block.sets[0]).toMatchObject({ type: 'warmup', weightKg: 50 })
+      expect(history.state.started[0].performedScheme).toEqual({
+        type: 'fixedSets',
+        warmupCount: 1,
+        workSets: 2
+      })
+
+      block.querySelector('.reps').value = '5'
+      block.querySelector('.reps').dispatchEvent(new Event('input', { bubbles: true }))
+      await Promise.resolve()
+      block.querySelector('[data-save]').click()
+      await Promise.resolve()
+
+      const rec = store.getRecordsForExercise(ex.id)[0]
+      expect(rec.planEntryId).toBe(entry.id)
+      expect(rec.session.planName).toBe('PlanScheme')
+      expect(rec.trainingWeightKg).toBe(100)
+      // snapshot of what was actually executed, not the plan default
+      expect(rec.setScheme.toJSON()).toEqual({ type: 'fixedSets', warmupCount: 1, workSets: 2 })
+    })
   })
 
   describe('history weight filter', () => {
@@ -755,7 +798,7 @@ describe('workout training weight input', () => {
       document.querySelector('[data-export]').click()
       expect(urls).toHaveLength(1)
       const exported = JSON.parse(await urls[0].text())
-      expect(exported.version).toBe(1)
+      expect(exported.version).toBe(2)
       expect(exported.data.exercises).toHaveLength(1)
       expect(document.querySelector('[data-status]').textContent).toContain('Saved workout-backup-')
     })
@@ -772,7 +815,7 @@ describe('workout training weight input', () => {
       chooseFile(fileText)
       await new Promise((r) => setTimeout(r, 50))
       expect(document.querySelector('.backup-preview').textContent).toContain('1 exercise')
-      expect(document.querySelector('.backup-preview').textContent).toContain('1 record')
+      expect(document.querySelector('.backup-preview').textContent).toContain('1 session')
 
       document.querySelector('[data-confirm]').click()
       expect(store.getData().exercises).toHaveLength(1)

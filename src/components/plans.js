@@ -1,14 +1,29 @@
-import { getData, addPlan, deletePlan, updatePlan, getExercise } from '../store.js'
+import {
+  getPlan,
+  getPlans,
+  getExercises,
+  getExercise,
+  addPlan,
+  deletePlan,
+  updatePlan,
+  addExerciseToPlan,
+  updatePlanEntry,
+  removePlanEntry,
+  movePlanEntry,
+  fmtSetScheme
+} from '../store.js'
 import { ReactiveElement, esc } from './base.js'
+import { schemeTypeOptions, schemeValueLabel, schemeValueDefault, buildScheme } from './scheme-form.js'
 import './header.js'
 
 export class PlanList extends ReactiveElement {
   template() {
-    const { plans, exercises } = getData()
+    const plans = getPlans()
+    const exercises = getExercises()
     const items = plans.map(
       (plan) => `
         <li class="list-item">
-          <span>${esc(plan.name)} <small class="muted">(${plan.exerciseIds.length} exercises)</small></span>
+          <span>${esc(plan.name)} <small class="muted">(${plan.entries.length} exercises)</small></span>
           <span>
             <a class="btn btn-primary" href="#/plan/${plan.id}">Edit</a>
             <a class="btn btn-start" href="#/workout/${plan.id}">Start</a>
@@ -30,30 +45,38 @@ export class PlanList extends ReactiveElement {
       </div>`
   }
 
-  bind() {
-    this.querySelector('form').addEventListener('submit', (e) => {
-      e.preventDefault()
-      const input = e.target.querySelector('input')
-      if (!input.value.trim()) return
-      const plan = addPlan(input.value)
-      location.hash = `#/plan/${plan.id}`
-    })
-    this.querySelector('.list').addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-delete]')
-      if (!btn) return
-      if (confirm(`Delete plan "${btn.dataset.name}"?`)) deletePlan(btn.dataset.delete)
-    })
+  bind(signal) {
+    this.querySelector('form').addEventListener(
+      'submit',
+      (e) => {
+        e.preventDefault()
+        const input = e.target.querySelector('input')
+        if (!input.value.trim()) return
+        const plan = addPlan(input.value)
+        location.hash = `#/plan/${plan.id}`
+      },
+      { signal }
+    )
+    this.querySelector('.list').addEventListener(
+      'click',
+      (e) => {
+        const btn = e.target.closest('[data-delete]')
+        if (!btn) return
+        if (confirm(`Delete plan "${btn.dataset.name}"?`)) deletePlan(btn.dataset.delete)
+      },
+      { signal }
+    )
   }
 }
 
 export class PlanEdit extends ReactiveElement {
   template() {
-    const plan = getData().plans.find((p) => p.id === this.getAttribute('plan-id'))
+    const plan = getPlan(this.getAttribute('plan-id'))
     if (!plan) {
       return `<div class="screen"><app-header title="Plan not found" back="#/plans"></app-header></div>`
     }
-    const inPlan = new Set(plan.exerciseIds)
-    const available = getData().exercises.filter((ex) => !inPlan.has(ex.id))
+    const inPlan = new Set(plan.entries.map((e) => e.exerciseId))
+    const available = getExercises().filter((ex) => !inPlan.has(ex.id))
     return `
       <div class="screen">
         <app-header title="Edit: ${esc(plan.name)}" back="#/plans"></app-header>
@@ -64,19 +87,23 @@ export class PlanEdit extends ReactiveElement {
         <div class="section-title">Exercises in this plan (tap to remove)</div>
         <ul class="list">
           ${
-            plan.exerciseIds.length
-              ? plan.exerciseIds
-                  .map((id, idx) => {
-                    const ex = getExercise(id)
+            plan.entries.length
+              ? plan.entries
+                  .map((entry, idx) => {
+                    const ex = getExercise(entry.exerciseId)
                     const isFirst = idx === 0
-                    const isLast = idx === plan.exerciseIds.length - 1
+                    const isLast = idx === plan.entries.length - 1
                     return `
-                      <li class="list-item">
-                        <span>${idx + 1}. ${esc(ex ? ex.name : '?')}</span>
+                      <li class="list-item" data-entry="${entry.id}">
                         <span>
-                          <button class="btn btn-small" data-move-up="${id}" ${isFirst ? 'disabled' : ''} title="Move up">▲</button>
-                          <button class="btn btn-small" data-move-down="${id}" ${isLast ? 'disabled' : ''} title="Move down">▼</button>
-                          <button class="btn btn-danger" data-remove="${id}">Remove</button>
+                          <strong>${idx + 1}. ${esc(ex ? ex.name : '?')}</strong>
+                          <small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(fmtSetScheme(entry.setScheme))}</small>
+                        </span>
+                        <span class="ex-actions">
+                          <button class="btn btn-small" data-scheme="${entry.id}">Scheme</button>
+                          <button class="btn btn-small" data-move-up="${entry.id}" ${isFirst ? 'disabled' : ''} title="Move up">▲</button>
+                          <button class="btn btn-small" data-move-down="${entry.id}" ${isLast ? 'disabled' : ''} title="Move down">▼</button>
+                          <button class="btn btn-danger" data-remove="${entry.id}">Remove</button>
                         </span>
                       </li>`
                   })
@@ -92,7 +119,7 @@ export class PlanEdit extends ReactiveElement {
                   .map(
                     (ex) => `
                       <li class="list-item">
-                        <span>${esc(ex.name)}</span>
+                        <span>${esc(ex.name)} <small class="badge">${esc(fmtSetScheme(ex.setScheme))}</small></span>
                         <button class="btn btn-primary" data-add="${ex.id}">Add</button>
                       </li>`
                   )
@@ -104,59 +131,113 @@ export class PlanEdit extends ReactiveElement {
       </div>`
   }
 
+  schemeEditorHTML(entry) {
+    const scheme = entry.setScheme
+    return `
+      <li class="card plan-scheme-editor" data-editor="${entry.id}">
+        <div class="ex-controls">
+          <label class="field">
+            <span class="field-label">Scheme</span>
+            <select class="input" data-editor-type>${schemeTypeOptions(scheme.type)}</select>
+          </label>
+          <label class="field">
+            <span class="field-label">Warm-up sets</span>
+            <input class="input" data-editor-warmups type="number" step="1" min="0" value="${scheme.warmupCount}" />
+          </label>
+          <label class="field">
+            <span class="field-label" data-editor-value-label>${schemeValueLabel(scheme.type)}</span>
+            <input class="input" data-editor-value type="number" step="1" min="1" value="${scheme.value}" />
+          </label>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn btn-primary btn-small" data-editor-save="${entry.id}">Save scheme</button>
+          <button class="btn btn-small" data-editor-cancel="${entry.id}">Cancel</button>
+        </div>
+      </li>`
+  }
+
+  openSchemeEditor(entryId) {
+    const plan = getPlan(this.getAttribute('plan-id'))
+    const entry = plan?.getEntry(entryId)
+    const row = this.querySelector(`[data-entry="${entryId}"]`)
+    if (!entry || !row) return
+    this.querySelectorAll('[data-editor]').forEach((el) => el.remove())
+    row.insertAdjacentHTML('afterend', this.schemeEditorHTML(entry))
+    const editor = this.querySelector(`[data-editor="${entryId}"]`)
+    const typeSelect = editor.querySelector('[data-editor-type]')
+    const warmupsInput = editor.querySelector('[data-editor-warmups]')
+    const valueInput = editor.querySelector('[data-editor-value]')
+    const valueLabel = editor.querySelector('[data-editor-value-label]')
+    typeSelect.addEventListener('change', () => {
+      valueInput.min = '1'
+      valueInput.value = String(schemeValueDefault(typeSelect.value))
+      valueLabel.textContent = schemeValueLabel(typeSelect.value)
+    })
+    editor.querySelector('[data-editor-save]').addEventListener('click', () => {
+      const setScheme = buildScheme(
+        typeSelect.value,
+        parseInt(warmupsInput.value, 10) || 0,
+        parseInt(valueInput.value, 10)
+      )
+      updatePlanEntry(plan.id, entryId, { setScheme })
+    })
+    editor.querySelector('[data-editor-cancel]').addEventListener('click', () => editor.remove())
+  }
+
   bind(signal) {
+    const planId = this.getAttribute('plan-id')
+    const plan = getPlan(planId)
+    if (!plan) return
+
     const saveName = () => {
       const input = this.querySelector('[data-plan-name]')
-      const plan = getData().plans.find((p) => p.id === this.getAttribute('plan-id'))
-      if (!plan || !input) return
+      if (!input) return
       const next = input.value.trim()
-      if (!next || next === plan.name) return
-      updatePlan(plan.id, { name: next })
+      const current = getPlan(planId)
+      if (!current || !next || next === current.name) return
+      updatePlan(planId, { name: next })
     }
-    this.querySelector('[data-save-name]')?.addEventListener('click', saveName)
-    this.querySelector('[data-plan-name]')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+    this.querySelector('[data-save-name]')?.addEventListener('click', saveName, { signal })
+    this.querySelector('[data-plan-name]')?.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.key !== 'Enter') return
         e.preventDefault()
         saveName()
-      }
-    })
+      },
+      { signal }
+    )
 
     this.addEventListener(
       'click',
       (e) => {
         if (e.target.closest('[data-save-name]')) return
-        const planId = this.getAttribute('plan-id')
-        const plan = getData().plans.find((p) => p.id === planId)
-        if (!plan) return
+        const current = getPlan(planId)
+        if (!current) return
+
         const addBtn = e.target.closest('[data-add]')
         if (addBtn) {
-          // Prevent duplicate adds – the available list already excludes exercises in the plan,
-          // but this guard is a safety net.
-          if (plan.exerciseIds.includes(addBtn.dataset.add)) {
-            // Already in plan – don't add again
-            return
-          }
-          updatePlan(plan.id, { exerciseIds: [...plan.exerciseIds, addBtn.dataset.add] })
+          addExerciseToPlan(planId, addBtn.dataset.add)
+          return
         }
         const removeBtn = e.target.closest('[data-remove]')
-        if (removeBtn) updatePlan(plan.id, { exerciseIds: plan.exerciseIds.filter((x) => x !== removeBtn.dataset.remove) })
+        if (removeBtn) {
+          removePlanEntry(planId, removeBtn.dataset.remove)
+          return
+        }
         const upBtn = e.target.closest('[data-move-up]')
         if (upBtn && !upBtn.disabled) {
-          const idx = plan.exerciseIds.indexOf(upBtn.dataset.moveUp)
-          if (idx > 0) {
-            const next = [...plan.exerciseIds]
-            ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-            updatePlan(plan.id, { exerciseIds: next })
-          }
+          movePlanEntry(planId, upBtn.dataset.moveUp, -1)
+          return
         }
         const downBtn = e.target.closest('[data-move-down]')
         if (downBtn && !downBtn.disabled) {
-          const idx = plan.exerciseIds.indexOf(downBtn.dataset.moveDown)
-          if (idx !== -1 && idx < plan.exerciseIds.length - 1) {
-            const next = [...plan.exerciseIds]
-            ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
-            updatePlan(plan.id, { exerciseIds: next })
-          }
+          movePlanEntry(planId, downBtn.dataset.moveDown, 1)
+          return
+        }
+        const schemeBtn = e.target.closest('[data-scheme]')
+        if (schemeBtn) {
+          this.openSchemeEditor(schemeBtn.dataset.scheme)
         }
       },
       { signal }

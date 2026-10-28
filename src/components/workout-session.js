@@ -1,4 +1,4 @@
-import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isBodyweight, isFixedSets, fmtSetScheme } from '../store.js'
+import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isBodyweight, fmtSetScheme, SetScheme } from '../store.js'
 import { warmupWeights } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
@@ -11,8 +11,10 @@ export class WorkoutSession extends HTMLElement {
       return
     }
     const today = new Date().toISOString().split('T')[0]
-    const exercises = plan.exerciseIds.map(getExercise).filter(Boolean)
-    this.exercises = exercises
+    const blocksData = plan.entries
+      .map((entry) => ({ entry, exercise: getExercise(entry.exerciseId) }))
+      .filter((x) => x.exercise)
+    this.exercises = blocksData.map((x) => x.exercise)
     this.index = 0
     this.blocks = []
     this.innerHTML = `
@@ -22,7 +24,7 @@ export class WorkoutSession extends HTMLElement {
           <label class="muted" style="min-width:50px">Date</label>
           <input class="input" type="date" data-workout-date value="${today}" />
         </div>
-        ${exercises.length ? '' : '<p class="empty">This plan has no exercises.</p>'}
+        ${blocksData.length ? '' : '<p class="empty">This plan has no exercises.</p>'}
         <div class="workout-progress">
           <span class="muted" data-counter></span>
           <div class="dots" data-dots></div>
@@ -35,8 +37,9 @@ export class WorkoutSession extends HTMLElement {
         <button class="btn btn-start big" data-conclude style="margin-top:12px; width:100%">Conclude workout</button>
       </div>`
     const stage = this.querySelector('.blocks')
-    for (const exercise of exercises) {
+    for (const { entry, exercise } of blocksData) {
       const block = document.createElement('exercise-set-block')
+      block.entry = entry
       block.exercise = exercise
       stage.append(block)
       this.blocks.push(block)
@@ -49,6 +52,7 @@ export class WorkoutSession extends HTMLElement {
         block.sets = []
         block.note = ''
         block.suggestedReps = null
+        block.performedScheme = null
         block.saved = false
         block.renderInput()
         const i = this.blocks.indexOf(block)
@@ -105,7 +109,9 @@ export class WorkoutSession extends HTMLElement {
     const st = history.state
     if (st?.workoutPlanId === plan.id && Array.isArray(st.started)) {
       for (const entry of st.started) {
-        const block = this.blocks.find((b) => b.exercise.id === entry.exerciseId)
+        const block =
+          this.blocks.find((b) => entry.entryId && b.entry?.id === entry.entryId) ||
+          this.blocks.find((b) => b.exercise.id === entry.exerciseId)
         if (!block) continue
         if (Array.isArray(entry.sets) && entry.sets.length) {
           block.sets = entry.sets.map((s) => ({ ...s }))
@@ -113,8 +119,8 @@ export class WorkoutSession extends HTMLElement {
           block.suggestedReps = entry.suggestedReps ?? null
         } else if (entry.tw != null) {
           const tw = entry.tw
-          const scheme = block.exercise.setScheme
-          const works = isFixedSets(block.exercise) ? scheme.workSets : 3
+          const scheme = block.scheme
+          const works = scheme.isFixedSets ? scheme.workSets : 3
           block.sets = [
             ...warmupWeights(tw, scheme.warmupCount).map((weightKg) => ({ type: 'warmup', weightKg })),
             ...Array.from({ length: works }, () => ({ type: 'working', weightKg: tw }))
@@ -122,6 +128,7 @@ export class WorkoutSession extends HTMLElement {
           block.note = entry.note || ''
           block.suggestedReps = entry.suggestedReps ?? null
         } else continue
+        block.performedScheme = entry.performedScheme ? SetScheme.fromJSON(entry.performedScheme) : null
         block.saved = false
         block.renderSets()
         this._stack.push(block)
@@ -172,10 +179,12 @@ export class WorkoutSession extends HTMLElement {
 
   _pushHistory() {
     const started = this._stack.map((b) => ({
+      entryId: b.entry?.id ?? null,
       exerciseId: b.exercise.id,
       sets: b.sets.map((s) => ({ ...s })),
       note: b.note || '',
-      suggestedReps: b.suggestedReps ?? null
+      suggestedReps: b.suggestedReps ?? null,
+      performedScheme: b.performedScheme ? b.performedScheme.toJSON() : null
     }))
     history.replaceState(
       { workoutPlanId: this.getAttribute('plan-id'), started, index: this.index },
@@ -194,10 +203,15 @@ export class ExerciseSetBlock extends HTMLElement {
     this.renderInput()
   }
 
+  /** Effective scheme: the plan slot wins over the exercise default. */
+  get scheme() {
+    return this.entry?.setScheme ?? this.exercise.setScheme
+  }
+
   renderInput() {
     this.className = 'card'
-    const fixedSets = isFixedSets(this.exercise)
-    const scheme = this.exercise.setScheme
+    const scheme = this.scheme
+    const fixedSets = scheme.isFixedSets
     const schemeBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(fmtSetScheme(scheme))}</small>`
     const bw = isBodyweight(this.exercise)
     const twPlaceholder = bw ? 'Extra weight (kg)' : 'Training weight (kg)'
@@ -221,6 +235,7 @@ export class ExerciseSetBlock extends HTMLElement {
         const tw = raw.trim() === '' && bw ? 0 : parseFloat(raw)
         const workSets = parseInt(e.target.querySelector('.worksets').value, 10)
         if (Number.isNaN(tw) || tw < 0 || (!bw && tw <= 0) || !workSets || workSets < 1) return
+        this.performedScheme = scheme.withValue(workSets)
         this.sets = [
           ...warmupWeights(tw, scheme.warmupCount).map((weightKg) => ({ type: 'warmup', weightKg })),
           ...Array.from({ length: workSets }, () => ({ type: 'working', weightKg: tw }))
@@ -263,6 +278,7 @@ export class ExerciseSetBlock extends HTMLElement {
         if (Number.isNaN(tw) || tw < 0 || (!bw && tw <= 0) || !total || total <= 0 || !perSet || perSet <= 0) return
         const count = Math.max(1, Math.floor(total / perSet))
         this.suggestedReps = perSet
+        this.performedScheme = scheme.withValue(total)
         this.sets = [
           ...warmupWeights(tw, scheme.warmupCount).map((weightKg) => ({ type: 'warmup', weightKg })),
           ...Array.from({ length: count }, () => ({ type: 'working', weightKg: tw, reps: null }))
@@ -281,7 +297,7 @@ export class ExerciseSetBlock extends HTMLElement {
 
   renderSets() {
     const bb = isBarbell(this.exercise)
-    const fixedSets = isFixedSets(this.exercise)
+    const fixedSets = this.scheme.isFixedSets
     const rows = this.sets.map((set, i) => {
       const warmupsSoFar = this.sets.slice(0, i).filter((s) => s.type === 'warmup').length
       const label =
@@ -299,7 +315,7 @@ export class ExerciseSetBlock extends HTMLElement {
           ${bb ? `<a class="btn btn-small" href="#/plates?weight=${set.weightKg}">Plates</a>` : ''}
         </div>`
     })
-    const schemeBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(fmtSetScheme(this.exercise.setScheme))}</small>`
+    const schemeBadge = `<small class="badge" style="background:rgba(47,191,113,0.15); color:var(--start)">${esc(fmtSetScheme(this.performedScheme ?? this.scheme))}</small>`
     this.innerHTML = `
       <div class="card-title">
         <span>${esc(this.exercise.name)} ${schemeBadge}</span>
@@ -350,15 +366,25 @@ export class ExerciseSetBlock extends HTMLElement {
     const existing = findRecordForExerciseOnDate(this.exercise.id, dateForCheck)
     const setsPayload = this.sets.map(({ type, weightKg, reps }) => ({ type, weightKg, reps: reps ?? null }))
     const notePayload = (this.note || '').trim()
+    const planId = session?.getAttribute('plan-id') ?? null
+    const plan = planId ? getPlan(planId) : null
+    const snapshot = {
+      setScheme: this.performedScheme ?? this.scheme,
+      trainingWeightKg: this.workingWeight(),
+      planId,
+      planName: plan?.name ?? null,
+      planEntryId: this.entry?.id ?? null
+    }
     if (existing) {
       if (!confirm('There is a record for this exercise in this day already. Update it?')) return
-      updateRecord(existing.id, { sets: setsPayload, note: notePayload, date: dateForCheck })
+      updateRecord(existing.id, { sets: setsPayload, note: notePayload, date: dateForCheck, ...snapshot })
     } else {
       addRecord({
         exerciseId: this.exercise.id,
         sets: setsPayload,
         note: notePayload,
-        ...(dateIso ? { date: dateIso } : {})
+        ...(dateIso ? { date: dateIso } : {}),
+        ...snapshot
       })
     }
     this.saved = true

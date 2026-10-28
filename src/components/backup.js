@@ -42,7 +42,7 @@ export class BackupView extends HTMLElement {
       `${s.exercises} exercise${s.exercises === 1 ? '' : 's'}`,
       `${s.plans} plan${s.plans === 1 ? '' : 's'}`,
       `${s.profiles} profile${s.profiles === 1 ? '' : 's'}`,
-      `${s.records} record${s.records === 1 ? '' : 's'}`
+      `${s.sessions} session${s.sessions === 1 ? '' : 's'}`
     ]
     return bits.join(', ')
   }
@@ -55,7 +55,7 @@ export class BackupView extends HTMLElement {
         <app-header title="Backup" back="#/"></app-header>
         <div class="card">
           <div class="card-title">Export</div>
-          <p class="muted">Saves every exercise, plan, weight profile and history record to a single JSON file.</p>
+          <p class="muted">Saves every exercise, plan, weight profile and workout session to a single JSON file.</p>
           <div class="backup-actions">
             <button class="btn" data-export>Download backup</button>
             ${this._shareOk ? '<button class="btn" data-share>Share backup…</button>' : ''}

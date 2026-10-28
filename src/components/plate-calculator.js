@@ -1,11 +1,11 @@
-import { getData, getProfile } from '../store.js'
+import { getProfiles, getProfile } from '../store.js'
 import { calcPlates } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
 
 export class PlateCalculator extends HTMLElement {
   connectedCallback() {
-    const profiles = getData().profiles
+    const profiles = getProfiles()
     if (!profiles.length) {
       this.innerHTML = `
         <div class="screen">

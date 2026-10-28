@@ -93,6 +93,49 @@ describe('set schemes', () => {
     expect(fresh.getExercise('m').tier).toBeUndefined()
   })
 
+  it('migrates legacy records from saved data into sessions', async () => {
+    storage.set(
+      'workout-app-data',
+      JSON.stringify({
+        exercises: [{ id: 'e1', name: 'Squat', category: 'Barbell', tier: 'main' }],
+        plans: [],
+        profiles: [],
+        records: [
+          {
+            id: 'r1',
+            exerciseId: 'e1',
+            date: '2026-01-05T12:00:00.000Z',
+            note: 'felt good',
+            sets: [{ type: 'working', weightKg: 100, reps: 5 }]
+          }
+        ]
+      })
+    )
+    vi.resetModules()
+    const fresh = await import('../src/store.js')
+
+    const sessions = fresh.getSessions()
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].performedOn).toBe('2026-01-05')
+    const rec = fresh.getRecordsForExercise('e1')[0]
+    expect(rec.sets[0].weightKg).toBe(100)
+    expect(rec.note).toBe('felt good')
+    expect(rec.date).toBe('2026-01-05')
+  })
+
+  it('imports legacy backups that still use records', () => {
+    const legacy = {
+      exercises: [{ id: 'e1', name: 'Squat', category: 'Barbell' }],
+      plans: [],
+      profiles: [],
+      records: [{ id: 'r1', exerciseId: 'e1', date: '2026-02-01', sets: [{ type: 'working', weightKg: 90, reps: 5 }] }]
+    }
+    const { summary } = store.previewBackup(JSON.stringify(legacy))
+    expect(summary.sessions).toBe(1)
+    store.importBackup(legacy)
+    expect(store.getRecordsForExercise('e1')[0].sets[0].weightKg).toBe(90)
+  })
+
   it('describes schemes for badges', () => {
     expect(store.fmtSetScheme({ type: 'fixedSets', warmupCount: 3, workSets: 3 })).toBe('3 work sets + 3 WU')
     expect(store.fmtSetScheme({ type: 'fixedSets', warmupCount: 0, workSets: 5 })).toBe('5 work sets')
@@ -143,20 +186,40 @@ describe('profiles', () => {
     const fresh = await import('../src/store.js')
     const loaded = fresh.getProfile(p.id)
 
-    expect(loaded.plates[0]).toEqual({ kg: 10, count: Infinity })
-    expect(loaded.plates[1]).toEqual({ kg: 5, count: 2 })
+    expect(loaded.plates[0]).toMatchObject({ kg: 10, count: Infinity })
+    expect(loaded.plates[1]).toMatchObject({ kg: 5, count: 2 })
   })
 })
 
 describe('records', () => {
   it('stores and retrieves records newest first', async () => {
     const ex = store.addExercise('Squat')
-    store.addRecord({ exerciseId: ex.id, sets: [{ type: 'working', weightKg: 80, reps: 5 }] })
-    await new Promise((r) => setTimeout(r, 5))
-    store.addRecord({ exerciseId: ex.id, sets: [{ type: 'working', weightKg: 82.5, reps: 5 }] })
+    store.addRecord({
+      exerciseId: ex.id,
+      date: '2026-01-01T12:00:00.000Z',
+      sets: [{ type: 'working', weightKg: 80, reps: 5 }]
+    })
+    store.addRecord({
+      exerciseId: ex.id,
+      date: '2026-01-02T12:00:00.000Z',
+      sets: [{ type: 'working', weightKg: 82.5, reps: 5 }]
+    })
     const recs = store.getRecordsForExercise(ex.id)
     expect(recs).toHaveLength(2)
     expect(recs[0].sets[0].weightKg).toBe(82.5)
+  })
+
+  it('groups same-day exercises into one workout session', () => {
+    const squat = store.addExercise('Squat')
+    const bench = store.addExercise('Bench')
+    const date = '2026-01-15T12:00:00.000Z'
+    store.addRecord({ exerciseId: squat.id, date, sets: [{ type: 'working', weightKg: 100, reps: 5 }] })
+    store.addRecord({ exerciseId: bench.id, date, sets: [{ type: 'working', weightKg: 80, reps: 5 }] })
+
+    const sessions = store.getSessions()
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].performedOn).toBe('2026-01-15')
+    expect(sessions[0].exercises.map((e) => e.exerciseId)).toEqual([squat.id, bench.id])
   })
 
   it('filters records by exercise', () => {
@@ -211,7 +274,7 @@ describe('backup export/import', () => {
     expect(store.getData().exercises).toHaveLength(0)
 
     const { payload, summary } = store.previewBackup(JSON.stringify(file))
-    expect(summary).toMatchObject({ exercises: 1, plans: 1, profiles: 1, records: 1 })
+    expect(summary).toMatchObject({ exercises: 1, plans: 1, profiles: 1, sessions: 1 })
     expect(summary.exportedAt).toBeTruthy()
     const result = store.importBackup(payload)
     expect(result).toEqual(summary)
@@ -237,7 +300,7 @@ describe('backup export/import', () => {
     // A well-formed but empty envelope previews with zero counts; data is
     // only replaced on explicit import, so previewing leaves data untouched.
     const empty = store.previewBackup('{"data":{}}')
-    expect(empty.summary).toMatchObject({ exercises: 0, plans: 0, profiles: 0, records: 0 })
+    expect(empty.summary).toMatchObject({ exercises: 0, plans: 0, profiles: 0, sessions: 0 })
     expect(JSON.stringify(store.getData())).toBe(before)
   })
 

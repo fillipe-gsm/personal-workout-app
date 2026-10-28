@@ -1,75 +1,41 @@
+import {
+  uid,
+  EXERCISE_CATEGORIES,
+  normalizeCategory,
+  SET_SCHEME_TYPES,
+  SET_SCHEME_LABELS,
+  SetScheme,
+  DEFAULT_WARMUP_COUNT,
+  DEFAULT_WORK_SETS,
+  DEFAULT_TOTAL_REPS,
+  Exercise,
+  ExerciseInWorkoutPlan,
+  WorkoutPlan,
+  WeightProfile,
+  WeightPlate,
+  WorkoutSession,
+  WorkoutSet
+} from './models/index.js'
+
 const KEY = 'workout-app-data'
 
-const DEFAULT_DATA = {
-  exercises: [],
-  plans: [],
-  profiles: [],
-  records: []
-}
-
-export function uid() {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-}
-
-export const EXERCISE_CLASSES = ['Barbell', 'Bodyweight', 'Dumbbell', 'Machine']
-const CATEGORY_ALIASES = { Dumbbel: 'Dumbbell' }
-
-function normalizeCategory(c) {
-  return CATEGORY_ALIASES[c] || c
-}
-
-export const SET_SCHEME_TYPES = ['fixedSets', 'fixedReps']
-
-export const DEFAULT_WARMUP_COUNT = 3
-export const DEFAULT_WORK_SETS = 3
-export const DEFAULT_TOTAL_REPS = 15
-
-function intOr(value, min, fallback) {
-  const n = Math.floor(Number(value))
-  return Number.isFinite(n) && n >= min ? n : fallback
-}
-
-// Accepts a stored/received setScheme and returns a normalized one. Legacy
-// exercises only had a `tier`: main → fixed sets (3 warm-ups + 3 work sets),
-// accessory → fixed reps (no warm-ups, 15 total reps).
-export function normalizeSetScheme(input, legacyTier) {
-  const raw = input && typeof input === 'object' ? input : null
-  let type = raw?.type
-  if (type !== 'fixedSets' && type !== 'fixedReps') {
-    type = SET_SCHEME_TYPES.includes(legacyTier)
-      ? legacyTier
-      : legacyTier === 'accessory'
-        ? 'fixedReps'
-        : 'fixedSets'
-  }
-  const warmupFallback = type === 'fixedSets' ? DEFAULT_WARMUP_COUNT : 0
-  const warmupCount = intOr(raw?.warmupCount, 0, warmupFallback)
-  if (type === 'fixedReps') {
-    return { type, warmupCount, totalReps: intOr(raw?.totalReps, 1, DEFAULT_TOTAL_REPS) }
-  }
-  return { type, warmupCount, workSets: intOr(raw?.workSets, 1, DEFAULT_WORK_SETS) }
-}
-
-export function defaultSetScheme(type = 'fixedSets') {
-  return normalizeSetScheme({ type })
-}
-
-function normalize(d) {
-  for (const profile of d.profiles) {
-    profile.plates = (profile.plates || []).map(({ kg, count }) => ({
-      kg,
-      count: Number.isFinite(count) ? count : Infinity
-    }))
-  }
-  for (const ex of d.exercises) {
-    ex.category = normalizeCategory(ex.category)
-    if (!ex.category || !EXERCISE_CLASSES.includes(ex.category)) ex.category = 'Barbell'
-    ex.setScheme = normalizeSetScheme(ex.setScheme, ex.tier)
-    delete ex.tier
-  }
-  return d
+// Compatibility exports (views/tests used these names before the model layer).
+export const EXERCISE_CLASSES = EXERCISE_CATEGORIES
+export {
+  SET_SCHEME_TYPES,
+  SET_SCHEME_LABELS,
+  SetScheme,
+  Exercise,
+  ExerciseInWorkoutPlan,
+  WorkoutPlan,
+  WeightProfile,
+  WeightPlate,
+  WorkoutSession,
+  WorkoutSet,
+  DEFAULT_WARMUP_COUNT,
+  DEFAULT_WORK_SETS,
+  DEFAULT_TOTAL_REPS,
+  uid
 }
 
 export function isBarbell(exercise) {
@@ -81,29 +47,96 @@ export function isBodyweight(exercise) {
 }
 
 export function isFixedSets(exercise) {
-  return normalizeSetScheme(exercise?.setScheme).type === 'fixedSets'
+  return SetScheme.fromJSON(exercise?.setScheme).isFixedSets
 }
 
 export function isFixedReps(exercise) {
-  return normalizeSetScheme(exercise?.setScheme).type === 'fixedReps'
+  return SetScheme.fromJSON(exercise?.setScheme).isFixedReps
 }
 
-// Human-readable setScheme summary for badges/labels.
+/** Plain-object normalized scheme (kept for callers that serialize directly). */
+export function normalizeSetScheme(input, legacyTier) {
+  return SetScheme.fromJSON(input, legacyTier).toJSON()
+}
+
+export function defaultSetScheme(type) {
+  return SetScheme.default(type).toJSON()
+}
+
+/** Human-readable setScheme summary for badges/labels. */
 export function fmtSetScheme(scheme) {
-  const s = normalizeSetScheme(scheme)
-  const warmups = s.warmupCount > 0 ? ` + ${s.warmupCount} WU` : ''
-  return s.type === 'fixedReps'
-    ? `${s.totalReps} total reps${warmups}`
-    : `${s.workSets} work sets${warmups}`
+  return SetScheme.fromJSON(scheme).describe()
+}
+
+function emptyData() {
+  return { exercises: [], plans: [], profiles: [], sessions: [] }
+}
+
+function toDay(value) {
+  const d = value ? new Date(value) : new Date()
+  return Number.isNaN(d.getTime()) ? new Date().toISOString().slice(0, 10) : d.toISOString().slice(0, 10)
+}
+
+function firstWorkingWeight(sets = []) {
+  const found = sets.find((s) => s.type !== 'warmup')
+  return found ? Number(found.weightKg) : null
+}
+
+/** Migrates the pre-model `records` array into one-exercise sessions. */
+function migrateLegacyRecords(records = [], exercisesById = new Map()) {
+  const groups = new Map()
+  for (const rec of records) {
+    if (!rec?.exerciseId) continue
+    const day = toDay(rec.date)
+    const planId = rec.planId ?? null
+    const key = `${day}|${planId ?? ''}`
+    if (!groups.has(key)) {
+      groups.set(key, { day, planId, planName: rec.planName ?? null, exercises: [] })
+    }
+    groups.get(key).exercises.push(rec)
+  }
+  const sessions = []
+  for (const group of groups.values()) {
+    const session = new WorkoutSession({
+      performedOn: group.day,
+      planId: group.planId,
+      planName: group.planName,
+      exercises: []
+    })
+    for (const rec of group.exercises) {
+      session.addExercise(rec.exerciseId, {
+        setScheme: exercisesById.get(rec.exerciseId)?.setScheme ?? SetScheme.default(),
+        trainingWeightKg: rec.trainingWeightKg ?? firstWorkingWeight(rec.sets),
+        note: rec.note ?? null,
+        sets: (rec.sets || []).map((s, i) => WorkoutSet.fromJSON(s, i))
+      })
+    }
+    sessions.push(session)
+  }
+  return sessions
+}
+
+function normalize(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {}
+  const exercises = (Array.isArray(source.exercises) ? source.exercises : []).map(Exercise.fromJSON)
+  const byId = new Map(exercises.map((e) => [e.id, e]))
+  const plans = (Array.isArray(source.plans) ? source.plans : []).map((p) =>
+    WorkoutPlan.fromJSON(p, (exerciseId) => byId.get(exerciseId)?.setScheme)
+  )
+  const profiles = (Array.isArray(source.profiles) ? source.profiles : []).map(WeightProfile.fromJSON)
+  const sessions =
+    Array.isArray(source.sessions) && source.sessions.length > 0
+      ? source.sessions.map(WorkoutSession.fromJSON)
+      : migrateLegacyRecords(Array.isArray(source.records) ? source.records : [], byId)
+  return { exercises, plans, profiles, sessions }
 }
 
 export function load() {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return structuredClone(DEFAULT_DATA)
-    return normalize({ ...structuredClone(DEFAULT_DATA), ...JSON.parse(raw) })
+    return raw ? normalize(JSON.parse(raw)) : emptyData()
   } catch {
-    return structuredClone(DEFAULT_DATA)
+    return emptyData()
   }
 }
 
@@ -115,7 +148,15 @@ export function getData() {
 }
 
 export function save() {
-  localStorage.setItem(KEY, JSON.stringify(data))
+  localStorage.setItem(
+    KEY,
+    JSON.stringify({
+      exercises: data.exercises,
+      plans: data.plans,
+      profiles: data.profiles,
+      sessions: data.sessions
+    })
+  )
   listeners.forEach((fn) => fn())
 }
 
@@ -125,41 +166,44 @@ export function subscribe(fn) {
 }
 
 export function clearAllData() {
-  data = structuredClone(DEFAULT_DATA)
+  data = emptyData()
   save()
 }
 
+// --- Exercises -------------------------------------------------------------
+
 export function addExercise(name, category = 'Barbell', setScheme = null) {
-  category = normalizeCategory(category)
-  if (!EXERCISE_CLASSES.includes(category)) category = 'Barbell'
   // Also accepts legacy 'main'/'accessory' tier strings for convenience.
   const legacyTier = typeof setScheme === 'string' ? setScheme : undefined
-  const ex = { id: uid(), name: name.trim(), category, setScheme: normalizeSetScheme(setScheme, legacyTier) }
-  data.exercises.push(ex)
+  const exercise = new Exercise({
+    name,
+    category,
+    setScheme: SetScheme.fromJSON(setScheme, legacyTier)
+  })
+  data.exercises.push(exercise)
   save()
-  return ex
+  return exercise
 }
 
 export function updateExercise(id, patch) {
-  const ex = data.exercises.find((e) => e.id === id)
-  if (ex) {
-    if (patch.category) patch.category = normalizeCategory(patch.category)
-    if (patch.category && !EXERCISE_CLASSES.includes(patch.category)) patch.category = 'Barbell'
-    if ('tier' in patch) {
-      if (!patch.setScheme) patch.setScheme = normalizeSetScheme(null, patch.tier)
-      delete patch.tier
-    }
-    if (patch.setScheme) patch.setScheme = normalizeSetScheme(patch.setScheme)
-    Object.assign(ex, patch)
-    save()
+  const exercise = data.exercises.find((e) => e.id === id)
+  if (!exercise) return exercise
+  if (patch.name != null) exercise.name = String(patch.name).trim()
+  if (patch.category != null) exercise.category = normalizeCategory(patch.category)
+  if (patch.tier != null || patch.setScheme != null) {
+    exercise.setScheme = SetScheme.fromJSON(patch.setScheme, patch.tier)
   }
-  return ex
+  if (patch.deletedAt !== undefined) exercise.deletedAt = patch.deletedAt
+  exercise.updatedAt = new Date().toISOString()
+  save()
+  return exercise
 }
 
 export function deleteExercise(id) {
   data.exercises = data.exercises.filter((e) => e.id !== id)
   for (const plan of data.plans) {
-    plan.exerciseIds = plan.exerciseIds.filter((x) => x !== id)
+    const entry = plan.findEntryForExercise(id)
+    if (entry) plan.removeEntry(entry.id)
   }
   save()
 }
@@ -168,18 +212,87 @@ export function getExercise(id) {
   return data.exercises.find((e) => e.id === id)
 }
 
+export function getExercises() {
+  return data.exercises
+}
+
+// --- Plans and their exercise slots ---------------------------------------
+
 export function addPlan(name) {
-  const plan = { id: uid(), name: name.trim(), exerciseIds: [] }
+  const plan = new WorkoutPlan({ name })
   data.plans.push(plan)
   save()
   return plan
 }
 
+/**
+ * Patches a plan. Supports the legacy `{ exerciseIds: [...] }` shape by
+ * rebuilding entries while keeping existing slots (and their schemes) intact.
+ */
 export function updatePlan(id, patch) {
   const plan = data.plans.find((p) => p.id === id)
-  if (plan) Object.assign(plan, patch)
+  if (!plan) return plan
+  if (patch.name != null) plan.name = String(patch.name).trim()
+  if (Array.isArray(patch.exerciseIds)) {
+    const existing = new Map(plan.entries.map((e) => [e.exerciseId, e]))
+    plan.entries = patch.exerciseIds
+      .map((exerciseId, position) => {
+        const entry = existing.get(exerciseId)
+        if (entry) {
+          entry.position = position
+          return entry
+        }
+        return new ExerciseInWorkoutPlan({
+          planId: plan.id,
+          exerciseId,
+          position,
+          setScheme: getExercise(exerciseId)?.setScheme
+        })
+      })
+      .sort((a, b) => a.position - b.position)
+  }
+  plan.updatedAt = new Date().toISOString()
   save()
   return plan
+}
+
+export function addExerciseToPlan(planId, exerciseId, setScheme) {
+  const plan = data.plans.find((p) => p.id === planId)
+  if (!plan) return null
+  if (plan.findEntryForExercise(exerciseId)) return plan.findEntryForExercise(exerciseId)
+  const entry = plan.addEntry(exerciseId, setScheme ?? getExercise(exerciseId)?.setScheme)
+  plan.updatedAt = new Date().toISOString()
+  save()
+  return entry
+}
+
+export function updatePlanEntry(planId, entryId, patch) {
+  const plan = data.plans.find((p) => p.id === planId)
+  const entry = plan?.getEntry(entryId)
+  if (!entry) return null
+  if (patch.setScheme != null) entry.setScheme = SetScheme.fromJSON(patch.setScheme)
+  plan.updatedAt = new Date().toISOString()
+  save()
+  return entry
+}
+
+export function removePlanEntry(planId, entryId) {
+  const plan = data.plans.find((p) => p.id === planId)
+  if (!plan) return
+  plan.removeEntry(entryId)
+  plan.updatedAt = new Date().toISOString()
+  save()
+}
+
+export function movePlanEntry(planId, entryId, delta) {
+  const plan = data.plans.find((p) => p.id === planId)
+  if (!plan) return false
+  const moved = plan.moveEntry(entryId, delta)
+  if (moved) {
+    plan.updatedAt = new Date().toISOString()
+    save()
+  }
+  return moved
 }
 
 export function deletePlan(id) {
@@ -191,8 +304,14 @@ export function getPlan(id) {
   return data.plans.find((p) => p.id === id)
 }
 
+export function getPlans() {
+  return data.plans
+}
+
+// --- Weight profiles -------------------------------------------------------
+
 export function addProfile(name, barbellKg) {
-  const profile = { id: uid(), name: name.trim(), barbellKg, plates: [] }
+  const profile = new WeightProfile({ name, barbellKg, plates: [] })
   data.profiles.push(profile)
   save()
   return profile
@@ -200,7 +319,13 @@ export function addProfile(name, barbellKg) {
 
 export function updateProfile(id, patch) {
   const profile = data.profiles.find((p) => p.id === id)
-  if (profile) Object.assign(profile, patch)
+  if (!profile) return profile
+  if (patch.name != null) profile.name = String(patch.name).trim()
+  if (patch.barbellKg != null) profile.barbellKg = Number(patch.barbellKg)
+  if (Array.isArray(patch.plates)) {
+    profile.plates = patch.plates.map((p) => (p instanceof WeightPlate ? p : WeightPlate.fromJSON(p)))
+  }
+  profile.updatedAt = new Date().toISOString()
   save()
   return profile
 }
@@ -214,36 +339,125 @@ export function getProfile(id) {
   return data.profiles.find((p) => p.id === id)
 }
 
+export function getProfiles() {
+  return data.profiles
+}
+
+// --- Sessions ("records") --------------------------------------------------
+
+function findSessionExercise(id) {
+  for (const session of data.sessions) {
+    const entry = session.findExerciseById(id)
+    if (entry) return { entry, session }
+  }
+  return null
+}
+
+/**
+ * Records one exercise in a workout. Exercises saved for the same day+plan
+ * are grouped into the same WorkoutSession. Returns the session-exercise.
+ */
 export function addRecord(record) {
-  const rec = { id: uid(), date: new Date().toISOString(), ...record }
-  data.records.push(rec)
+  const day = toDay(record.date)
+  const planId = record.planId ?? null
+  let session = data.sessions.find(
+    (s) => s.performedOn === day && (s.planId ?? null) === planId && !s.deletedAt
+  )
+  if (!session) {
+    session = new WorkoutSession({ performedOn: day, planId, planName: record.planName ?? null })
+    data.sessions.push(session)
+  }
+  let entry = session.findExercise(record.exerciseId)
+  if (entry) {
+    entry.replaceSets(record.sets || [])
+    if (record.note != null) entry.note = record.note
+  } else {
+    entry = session.addExercise(record.exerciseId, {
+      planEntryId: record.planEntryId ?? null,
+      setScheme: record.setScheme ?? getExercise(record.exerciseId)?.setScheme,
+      trainingWeightKg: record.trainingWeightKg ?? firstWorkingWeight(record.sets),
+      note: record.note ?? null,
+      sets: record.sets || []
+    })
+  }
+  session.updatedAt = new Date().toISOString()
   save()
-  return rec
+  return entry
 }
 
 export function findRecordForExerciseOnDate(exerciseId, dateIso) {
-  const targetDay = new Date(dateIso).toISOString().split('T')[0]
-  return data.records.find(
-    (r) => r.exerciseId === exerciseId && new Date(r.date).toISOString().split('T')[0] === targetDay
-  )
+  const day = toDay(dateIso)
+  const sessions = [...data.sessions]
+    .filter((s) => !s.deletedAt && s.performedOn === day)
+    .sort((a, b) => b.performedOn.localeCompare(a.performedOn))
+  for (const session of sessions) {
+    const entry = session.findExercise(exerciseId)
+    if (entry) return entry.attachSession(session)
+  }
+  return undefined
 }
 
 export function updateRecord(id, patch) {
-  const rec = data.records.find((r) => r.id === id)
-  if (rec) {
-    Object.assign(rec, patch)
-    save()
+  const found = findSessionExercise(id)
+  if (!found) return undefined
+  const { entry, session } = found
+  if (patch.sets) entry.replaceSets(patch.sets)
+  if (patch.note !== undefined) entry.note = patch.note
+  if (patch.setScheme != null) entry.setScheme = SetScheme.fromJSON(patch.setScheme)
+  if (patch.trainingWeightKg != null) entry.trainingWeightKg = Number(patch.trainingWeightKg)
+  if (patch.date) {
+    const day = toDay(patch.date)
+    if (day !== session.performedOn) {
+      const samePlan = (s) => (s.planId ?? null) === (session.planId ?? null)
+      if (session.exercises.length === 1) {
+        session.performedOn = day
+      } else {
+        let target = data.sessions.find((s) => s !== session && s.performedOn === day && samePlan(s))
+        if (!target) {
+          target = new WorkoutSession({ performedOn: day, planId: session.planId, planName: session.planName })
+          data.sessions.push(target)
+        }
+        session.exercises = session.exercises.filter((e) => e.id !== entry.id)
+        entry.sessionId = target.id
+        entry.position = target.exercises.length
+        entry.attachSession(target)
+        target.exercises.push(entry)
+      }
+    }
   }
-  return rec
+  session.updatedAt = new Date().toISOString()
+  save()
+  return entry
 }
 
+/** Session-exercises for an exercise, newest first (history view). */
 export function getRecordsForExercise(exerciseId) {
-  return data.records
-    .filter((r) => r.exerciseId === exerciseId)
-    .sort((a, b) => b.date.localeCompare(a.date))
+  return data.sessions
+    .filter((s) => !s.deletedAt)
+    .flatMap((session) =>
+      session.exercises.filter((e) => e.exerciseId === exerciseId).map((e) => e.attachSession(session))
+    )
+    .sort((a, b) => (b.session?.performedOn || '').localeCompare(a.session?.performedOn || ''))
 }
 
-export const BACKUP_VERSION = 1
+export function getSessions() {
+  return data.sessions
+}
+
+// --- Backup ----------------------------------------------------------------
+
+export const BACKUP_VERSION = 2
+
+function exportShape() {
+  return JSON.parse(
+    JSON.stringify({
+      exercises: data.exercises,
+      plans: data.plans,
+      profiles: data.profiles,
+      sessions: data.sessions
+    })
+  )
+}
 
 function backupSummary(payload) {
   return {
@@ -251,7 +465,7 @@ function backupSummary(payload) {
     exercises: payload.data.exercises.length,
     plans: payload.data.plans.length,
     profiles: payload.data.profiles.length,
-    records: payload.data.records.length
+    sessions: payload.data.sessions.length
   }
 }
 
@@ -259,26 +473,26 @@ function validateBackupPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('Not a workout backup file.')
   }
-  // Accept the canonical { version, exportedAt, data } envelope, or a bare
-  // data object ({ exercises, plans, profiles, records }) for leniency.
-  // A bare object with none of the collection keys is not a backup.
   const isEnvelope = payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
-  const hasBareKey = ['exercises', 'plans', 'profiles', 'records'].some((k) => k in payload)
+  const hasBareKey = ['exercises', 'plans', 'profiles', 'sessions', 'records'].some((k) => k in payload)
   if (!isEnvelope && !hasBareKey) throw new Error('Not a workout backup file.')
   const envelope = isEnvelope ? payload : null
   const raw = isEnvelope ? payload.data : payload
-  const d = { ...structuredClone(DEFAULT_DATA), ...raw }
-  for (const key of ['exercises', 'plans', 'profiles', 'records']) {
+  const d = { ...emptyData(), ...raw }
+  for (const key of ['exercises', 'plans', 'profiles']) {
     if (!Array.isArray(d[key])) throw new Error('Backup is missing valid data.')
     if (!d[key].every((item) => item && typeof item === 'object')) {
       throw new Error('Backup contains invalid entries.')
     }
   }
+  if ('sessions' in raw && !Array.isArray(raw.sessions)) throw new Error('Backup is missing valid data.')
+  if ('records' in raw && !Array.isArray(raw.records)) throw new Error('Backup is missing valid data.')
   return {
     version: envelope?.version ?? null,
-    exportedAt: typeof (envelope?.exportedAt ?? payload.exportedAt) === 'string'
-      ? (envelope?.exportedAt ?? payload.exportedAt)
-      : null,
+    exportedAt:
+      typeof (envelope?.exportedAt ?? payload.exportedAt) === 'string'
+        ? (envelope?.exportedAt ?? payload.exportedAt)
+        : null,
     data: normalize(d)
   }
 }
@@ -287,7 +501,7 @@ export function exportData() {
   return {
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
-    data: structuredClone(data)
+    data: exportShape()
   }
 }
 
@@ -303,8 +517,6 @@ export function previewBackup(fileText) {
 }
 
 export function importBackup(payload) {
-  // Accepts either the validated payload from previewBackup() (already a
-  // valid envelope) or raw parsed JSON; validation runs in both cases.
   const valid = validateBackupPayload(payload)
   data = valid.data
   save()

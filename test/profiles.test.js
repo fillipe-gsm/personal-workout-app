@@ -200,7 +200,8 @@ describe('profile plate editing', () => {
     submit(form)
     await Promise.resolve()
 
-    expect(store.getData().profiles[0].plates).toEqual([{ kg: 10, count: 4 }])
+    expect(store.getData().profiles[0].plates).toHaveLength(1)
+    expect(store.getData().profiles[0].plates[0]).toMatchObject({ kg: 10, count: 4 })
   })
 
   it('treats an empty count as unlimited', async () => {

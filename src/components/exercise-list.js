@@ -1,31 +1,27 @@
-import { getData, addExercise, deleteExercise, updateExercise, EXERCISE_CLASSES, SET_SCHEME_TYPES, fmtSetScheme } from '../store.js'
+import {
+  getExercises,
+  addExercise,
+  deleteExercise,
+  updateExercise,
+  EXERCISE_CLASSES,
+  fmtSetScheme
+} from '../store.js'
 import { ReactiveElement, esc } from './base.js'
+import { schemeTypeOptions, schemeValueLabel, schemeValueDefault, buildScheme, isFixedSetsType } from './scheme-form.js'
 import './header.js'
-
-const SCHEME_LABELS = { fixedSets: 'Fixed sets', fixedReps: 'Fixed reps' }
-
-function isSetsType(type) {
-  return type !== 'fixedReps'
-}
-
-function schemeOptions(selected) {
-  return SET_SCHEME_TYPES.map(
-    (t) => `<option value="${t}" ${t === selected ? 'selected' : ''}>${SCHEME_LABELS[t]}</option>`
-  ).join('')
-}
 
 function syncSchemeValueInput(input, label, type) {
   if (!input) return
-  const text = isSetsType(type) ? 'Work sets' : 'Total reps'
+  const text = schemeValueLabel(type)
   input.min = '1'
-  input.value = isSetsType(type) ? '3' : '15'
+  input.value = String(schemeValueDefault(type))
   input.placeholder = text
   if (label) label.textContent = text
 }
 
 export class ExerciseList extends ReactiveElement {
   template() {
-    const { exercises } = getData()
+    const exercises = getExercises()
     const items = exercises.map(
       (ex) => `
         <li class="card ex-card" data-card="${ex.id}">
@@ -52,7 +48,7 @@ export class ExerciseList extends ReactiveElement {
               ${EXERCISE_CLASSES.map((c) => `<option value="${c}">${c}</option>`).join('')}
             </select>
             <select class="input" data-new-scheme-type>
-              ${schemeOptions('fixedSets')}
+              ${schemeTypeOptions('fixedSets')}
             </select>
             <label class="field">
               <span class="field-label">Warm-up sets</span>
@@ -73,7 +69,7 @@ export class ExerciseList extends ReactiveElement {
 
   editCardHTML(ex) {
     const type = ex.setScheme.type
-    const value = isSetsType(type) ? ex.setScheme.workSets : ex.setScheme.totalReps
+    const value = isFixedSetsType(type) ? ex.setScheme.workSets : ex.setScheme.totalReps
     return `
       <div class="ex-edit">
         <input class="input" data-edit-name="${ex.id}" type="text" value="${esc(ex.name)}" placeholder="Exercise name" />
@@ -82,15 +78,15 @@ export class ExerciseList extends ReactiveElement {
             ${EXERCISE_CLASSES.map((c) => `<option value="${c}" ${c === (ex.category || 'Barbell') ? 'selected' : ''}>${c}</option>`).join('')}
           </select>
           <select class="input" data-edit-scheme-type="${ex.id}">
-            ${schemeOptions(type)}
+            ${schemeTypeOptions(type)}
           </select>
           <label class="field">
             <span class="field-label">Warm-up sets</span>
             <input class="input" data-edit-warmups="${ex.id}" type="number" step="1" min="0" value="${ex.setScheme.warmupCount}" placeholder="Warm-up sets" />
           </label>
           <label class="field">
-            <span class="field-label" data-edit-scheme-value-label="${ex.id}">${isSetsType(type) ? 'Work sets' : 'Total reps'}</span>
-            <input class="input" data-edit-scheme-value="${ex.id}" type="number" step="1" min="1" value="${value}" placeholder="${isSetsType(type) ? 'Work sets' : 'Total reps'}" />
+            <span class="field-label" data-edit-scheme-value-label="${ex.id}">${isFixedSetsType(type) ? 'Work sets' : 'Total reps'}</span>
+            <input class="input" data-edit-scheme-value="${ex.id}" type="number" step="1" min="1" value="${value}" placeholder="${isFixedSetsType(type) ? 'Work sets' : 'Total reps'}" />
           </label>
         </div>
         <div class="ex-edit-actions">
@@ -122,10 +118,8 @@ export class ExerciseList extends ReactiveElement {
       const type = schemeTypeSelect.value
       const warmupCount = parseInt(warmupsInput.value, 10) || 0
       const value = parseInt(schemeValueInput.value, 10)
-      const scheme = isSetsType(type)
-        ? { type, warmupCount, workSets: value }
-        : { type, warmupCount, totalReps: value }
-      addExercise(nameInput.value, categorySelect.value, scheme)
+      const setScheme = buildScheme(type, warmupCount, value)
+      addExercise(nameInput.value, categorySelect.value, setScheme)
     })
     this.querySelector('.list').addEventListener('click', (e) => {
       const delBtn = e.target.closest('[data-delete]')
@@ -135,7 +129,7 @@ export class ExerciseList extends ReactiveElement {
       }
       const editBtn = e.target.closest('[data-edit]')
       if (editBtn) {
-        const ex = getData().exercises.find((x) => x.id === editBtn.dataset.edit)
+        const ex = getExercises().find((x) => x.id === editBtn.dataset.edit)
         if (!ex) return
         const card = this.querySelector(`[data-card="${ex.id}"]`)
         if (card) {
@@ -165,9 +159,7 @@ export class ExerciseList extends ReactiveElement {
         const warmupCount = parseInt(card.querySelector(`[data-edit-warmups]`)?.value, 10) || 0
         const value = parseInt(card.querySelector(`[data-edit-scheme-value]`)?.value, 10)
         if (!name) return
-        const setScheme = isSetsType(type)
-          ? { type, warmupCount, workSets: value }
-          : { type, warmupCount, totalReps: value }
+        const setScheme = buildScheme(type, warmupCount, value)
         updateExercise(id, { name, category, setScheme })
         return
       }

@@ -63,10 +63,11 @@ export class ExerciseHistory extends ReactiveElement {
   cardHTML(rec, idx, view, bw) {
     const tw = trainingWeight(rec) ?? '-'
     const weightLabel = bw ? `Extra ${tw} kg` : `TW ${tw} kg`
+    const dateLabel = rec.date ? new Date(rec.date + 'T12:00:00').toLocaleDateString() : '?'
     return `
       <div class="card">
         <div class="card-title">
-          ${new Date(rec.date).toLocaleString()}
+          ${dateLabel}
           ${view.badgeLatest && idx === 0 ? '<span class="badge">latest</span>' : ''}
           <small class="muted">${weightLabel}</small>
         </div>
