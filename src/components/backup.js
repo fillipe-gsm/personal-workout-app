@@ -1,4 +1,6 @@
 import { exportData, previewBackup, importBackup } from '../store.js'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { esc } from './base.js'
 import './header.js'
 
@@ -29,6 +31,46 @@ function downloadTextFile(name, text) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+/**
+ * Writes the backup where the user can actually find it.
+ * - Native (Android/iOS): writes a real JSON file to the public Documents
+ *   folder through the Capacitor Filesystem plugin, which returns the actual
+ *   file URI shown in the UI.
+ * - Web: falls back to a browser download (Downloads folder).
+ */
+async function writeNativeFile(name, text) {
+  const options = {
+    path: name,
+    data: text,
+    directory: Directory.Documents,
+    encoding: Encoding.UTF8,
+    recursive: true
+  }
+  try {
+    return await Filesystem.writeFile(options)
+  } catch (err) {
+    // On Android <= 10 the public Documents folder needs a runtime storage
+    // permission. Ask for it and retry once; newer Androids don't need it.
+    if (Capacitor.getPlatform() !== 'android') throw err
+    const status = await Filesystem.checkPermissions()
+    if (status.publicStorage === 'granted') throw err
+    const requested = await Filesystem.requestPermissions()
+    if (requested.publicStorage !== 'granted') throw err
+    return Filesystem.writeFile(options)
+  }
+}
+
+async function saveBackupFile(backup) {
+  const name = backupFileName(backup.exportedAt)
+  const text = JSON.stringify(backup, null, 2)
+  if (Capacitor.isNativePlatform()) {
+    const result = await writeNativeFile(name, text)
+    return { name, uri: result?.uri ?? null, native: true }
+  }
+  downloadTextFile(name, text)
+  return { name, uri: null, native: false }
+}
+
 export class BackupView extends HTMLElement {
   connectedCallback() {
     this._pending = null
@@ -55,7 +97,7 @@ export class BackupView extends HTMLElement {
         <app-header title="Backup" back="#/"></app-header>
         <div class="card">
           <div class="card-title">Export</div>
-          <p class="muted">Saves every exercise, plan, weight profile and workout session to a single JSON file.</p>
+          <p class="muted">Saves every exercise, plan, weight profile and workout session to a single JSON file in your Documents folder.</p>
           <div class="backup-actions">
             <button class="btn" data-export>Download backup</button>
             ${this._shareOk ? '<button class="btn" data-share>Share backup…</button>' : ''}
@@ -86,11 +128,24 @@ export class BackupView extends HTMLElement {
   }
 
   bind() {
-    this.querySelector('[data-export]')?.addEventListener('click', () => {
-      const backup = exportData()
-      const name = backupFileName(backup.exportedAt)
-      downloadTextFile(name, JSON.stringify(backup, null, 2))
-      this.setStatus(true, `Saved ${name}. Move it to your other phone (Drive, email, USB), then use Import there.`)
+    this.querySelector('[data-export]')?.addEventListener('click', async () => {
+      try {
+        const backup = exportData()
+        const { name, uri, native } = await saveBackupFile(backup)
+        if (native) {
+          this.setStatus(
+            true,
+            `Saved ${name} to your Documents folder${uri ? ` (${uri})` : ''}. Open the Files app → Documents to find it.`
+          )
+        } else {
+          this.setStatus(
+            true,
+            `Saved ${name}. Move it to your other phone (Drive, email, USB), then use Import there.`
+          )
+        }
+      } catch (err) {
+        this.setStatus(false, `Could not save the backup: ${err?.message || err}`)
+      }
     })
     this.querySelector('[data-share]')?.addEventListener('click', async () => {
       const backup = exportData()
