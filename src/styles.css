@@ -107,6 +107,7 @@ select.input { width: 100%; }
   overflow-wrap: anywhere;
   font-size: 0.85rem;
 }
+.text-link { color: var(--primary); text-decoration: underline; overflow-wrap: anywhere; }
 .plan-scheme-editor { margin: -2px 0 10px; }
 .plan-scheme-editor .ex-controls { grid-template-columns: 1fr 1fr; }
 .plate-unlimited { display: flex; align-items: center; gap: 4px; font-size: 0.9rem; }

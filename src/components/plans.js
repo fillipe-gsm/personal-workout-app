@@ -11,7 +11,7 @@ import {
   movePlanEntry,
   fmtSetScheme
 } from '../store.js'
-import { ReactiveElement, esc } from './base.js'
+import { ReactiveElement, esc, linkify } from './base.js'
 import { schemeTypeOptions, schemeValueLabel, schemeValueDefault, buildScheme } from './scheme-form.js'
 import './header.js'
 
@@ -24,7 +24,7 @@ export class PlanList extends ReactiveElement {
         <li class="list-item">
           <span>
             <strong>${esc(plan.name)} ${plan.isFromTemplate ? '<small class="badge">Template</small>' : ''}</strong>
-            ${plan.description ? `<small class="muted plan-desc">${esc(plan.description)}</small>` : ''}
+            ${plan.description ? `<small class="muted plan-desc">${linkify(plan.description)}</small>` : ''}
             <small class="muted">(${plan.entries.length} exercises)</small>
           </span>
           <span>

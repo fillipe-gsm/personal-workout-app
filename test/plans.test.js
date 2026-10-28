@@ -168,12 +168,28 @@ describe('plan details and templates UI', () => {
     expect(badges).toContain('Template')
   })
 
+  it('renders description URLs as safe links', async () => {
+    store.addPlan('Linked plan', { description: 'Read https://example.com/program.' })
+    document.body.append(document.createElement('plan-list'))
+
+    const link = document.querySelector('.plan-desc a')
+    expect(link).toBeTruthy()
+    expect(link.getAttribute('href')).toBe('https://example.com/program')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+  })
+
   it('installs a template from the templates page', async () => {
     await import('../src/components/templates.js')
     document.body.append(document.createElement('template-list'))
 
     const button = document.querySelector('[data-install="stronglifts-5x5"]')
     expect(button.disabled).toBe(false)
+
+    const descriptionLink = document.querySelector('[data-template="stronglifts-5x5"] .muted a')
+    expect(descriptionLink).toBeTruthy()
+    expect(descriptionLink.getAttribute('href')).toContain('stronglifts.com')
+
     button.click()
     await Promise.resolve()
 

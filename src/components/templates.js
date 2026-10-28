@@ -1,6 +1,6 @@
 import { TEMPLATES } from '../templates/index.js'
 import { installTemplate, templateInstallState } from '../store.js'
-import { esc } from './base.js'
+import { esc, linkify } from './base.js'
 import './header.js'
 
 export class TemplateList extends HTMLElement {
@@ -41,7 +41,7 @@ export class TemplateList extends HTMLElement {
             <span>${esc(template.name)}</span>
             <small class="badge">${template.plans.length} plan${template.plans.length === 1 ? '' : 's'}</small>
           </div>
-          <p class="muted">${esc(template.description)}</p>
+          <p class="muted">${linkify(template.description)}</p>
           <p class="muted"><strong>Exercises:</strong> ${exerciseNames}</p>
           ${state.complete ? '<p class="saved-note">✓ Installed</p>' : ''}
           <button class="btn btn-primary" data-install="${template.key}" ${state.complete ? 'disabled' : ''}>
