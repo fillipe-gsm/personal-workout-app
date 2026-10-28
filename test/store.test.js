@@ -143,6 +143,121 @@ describe('set schemes', () => {
   })
 })
 
+describe('plan details and templates', () => {
+  const template = {
+    key: 'test-tpl',
+    name: 'Test Template',
+    version: 3,
+    description: 'Template description',
+    exercises: [
+      { name: 'Squat', category: 'Barbell', setScheme: { type: 'fixedSets', warmupCount: 3, workSets: 5 } },
+      { name: 'Deadlift', category: 'Barbell', setScheme: { type: 'fixedSets', warmupCount: 4, workSets: 1 } }
+    ],
+    plans: [
+      {
+        key: 'test-a',
+        name: 'Test A',
+        description: 'A day',
+        slots: [
+          { exercise: 'Squat', setScheme: { type: 'fixedSets', warmupCount: 3, workSets: 5 } },
+          { exercise: 'Deadlift', setScheme: { type: 'fixedSets', warmupCount: 4, workSets: 1 } }
+        ]
+      },
+      {
+        key: 'test-b',
+        name: 'Test B',
+        slots: [{ exercise: 'Squat', setScheme: { type: 'fixedReps', warmupCount: 1, totalReps: 20 } }]
+      }
+    ]
+  }
+
+  it('adds plans with a description (user provenance by default)', () => {
+    const plan = store.addPlan('Upper', { description: 'Push day' })
+    expect(plan.description).toBe('Push day')
+    expect(plan.source).toBe('user')
+    expect(plan.templateKey).toBeNull()
+
+    store.updatePlan(plan.id, { description: 'Pull day' })
+    expect(store.getPlan(plan.id).description).toBe('Pull day')
+  })
+
+  it('installs template exercises and plans with provenance and slot schemes', () => {
+    const summary = store.installTemplate(template)
+
+    expect(summary.createdExercises).toEqual(['Squat', 'Deadlift'])
+    expect(summary.createdPlans).toEqual(['Test A', 'Test B'])
+
+    const plans = store.getPlans()
+    expect(plans.map((p) => p.name)).toEqual(['Test A', 'Test B'])
+    expect(plans[0].source).toBe('template')
+    expect(plans[0].isFromTemplate).toBe(true)
+    expect(plans[0].templateKey).toBe('test-a')
+    expect(plans[0].templateVersion).toBe(3)
+    expect(plans[0].description).toBe('A day')
+    expect(plans[1].description).toBe('Template description') // falls back to template description
+
+    expect(plans[0].entries.map((e) => store.getExercise(e.exerciseId).name)).toEqual(['Squat', 'Deadlift'])
+    expect(plans[0].entries[1].setScheme.toJSON()).toEqual({
+      type: 'fixedSets',
+      warmupCount: 4,
+      workSets: 1
+    })
+    expect(plans[1].entries[0].setScheme.toJSON()).toEqual({
+      type: 'fixedReps',
+      warmupCount: 1,
+      totalReps: 20
+    })
+    expect(store.getExercises().every((e) => e.source === 'template')).toBe(true)
+  })
+
+  it('is idempotent: reinstalling skips plans that already exist', () => {
+    store.installTemplate(template)
+    const again = store.installTemplate(template)
+
+    expect(again.createdPlans).toEqual([])
+    expect(again.createdExercises).toEqual([])
+    expect(again.skippedPlans).toEqual(['Test A', 'Test B'])
+    expect(store.getPlans()).toHaveLength(2)
+    expect(store.getExercises()).toHaveLength(2)
+  })
+
+  it('reuses existing exercises by name and never overwrites user settings', () => {
+    const userSquat = store.addExercise('squat', 'Machine', {
+      type: 'fixedReps',
+      warmupCount: 0,
+      totalReps: 20
+    })
+
+    const summary = store.installTemplate(template)
+
+    expect(summary.reusedExercises).toContain('squat')
+    expect(summary.createdExercises).toEqual(['Deadlift'])
+    expect(store.getExercises()).toHaveLength(2)
+
+    const squat = store.getExercise(userSquat.id)
+    expect(squat.category).toBe('Machine')
+    expect(squat.source).toBe('user')
+    expect(squat.setScheme.toJSON()).toEqual({ type: 'fixedReps', warmupCount: 0, totalReps: 20 })
+
+    // The plan slot still carries the template prescription.
+    const plan = store.getPlans().find((p) => p.templateKey === 'test-a')
+    expect(plan.entries[0].exerciseId).toBe(userSquat.id)
+    expect(plan.entries[0].setScheme.workSets).toBe(5)
+  })
+
+  it('disambiguates a plan name that already exists', () => {
+    store.addPlan('Test A')
+    store.installTemplate(template)
+    expect(store.getPlans().map((p) => p.name)).toEqual(['Test A', 'Test A (template)', 'Test B'])
+  })
+
+  it('reports how much of a template is installed', () => {
+    expect(store.templateInstallState(template)).toEqual({ installed: 0, total: 2, complete: false })
+    store.installTemplate(template)
+    expect(store.templateInstallState(template)).toEqual({ installed: 2, total: 2, complete: true })
+  })
+})
+
 describe('plans', () => {
   it('creates a plan with empty exercise list', () => {
     const plan = store.addPlan('Legs')

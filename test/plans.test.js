@@ -11,6 +11,7 @@ vi.stubGlobal('localStorage', {
 
 const store = await import('../src/store.js')
 await import('../src/components/plans.js')
+import { STRONGLIFTS_5X5 } from '../src/templates/index.js'
 
 beforeEach(() => {
   store.clearAllData()
@@ -125,5 +126,76 @@ describe('plan exercise reordering', () => {
     // The catalog default is untouched.
     const ex = store.getExercise(planById(plan).entries[0].exerciseId)
     expect(ex.setScheme.toJSON()).toEqual({ type: 'fixedSets', warmupCount: 3, workSets: 3 })
+  })
+})
+
+describe('plan details and templates UI', () => {
+  it('creates a workout with a description from the add view', async () => {
+    await import('../src/components/plan-add.js')
+    const el = document.createElement('plan-add')
+    document.body.append(el)
+
+    const form = el.querySelector('form')
+    form.querySelector('[name="name"]').value = 'Upper body'
+    form.querySelector('[name="description"]').value = 'Push day'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    const plan = store.getPlans()[0]
+    expect(plan.name).toBe('Upper body')
+    expect(plan.description).toBe('Push day')
+    expect(location.hash).toBe(`#/plan/${plan.id}`)
+  })
+
+  it('saves the description from the plan edit view', async () => {
+    const plan = store.addPlan('Edit me')
+    const el = showPlanEdit(plan.id)
+
+    el.querySelector('[data-plan-description]').value = 'Details from the edit page'
+    el.querySelector('[data-save-name]').click()
+    await Promise.resolve()
+
+    expect(store.getPlan(plan.id).description).toBe('Details from the edit page')
+  })
+
+  it('shows description excerpts and template badges in the plans list', async () => {
+    store.addPlan('Custom plan', { description: 'My own details' })
+    store.installTemplate(STRONGLIFTS_5X5)
+    document.body.append(document.createElement('plan-list'))
+
+    expect(document.querySelector('.plan-desc').textContent).toBe('My own details')
+    const badges = [...document.querySelectorAll('.badge')].map((b) => b.textContent.trim())
+    expect(badges).toContain('Template')
+  })
+
+  it('installs a template from the templates page', async () => {
+    await import('../src/components/templates.js')
+    document.body.append(document.createElement('template-list'))
+
+    const button = document.querySelector('[data-install="stronglifts-5x5"]')
+    expect(button.disabled).toBe(false)
+    button.click()
+    await Promise.resolve()
+
+    const plans = store.getPlans()
+    expect(plans).toHaveLength(2)
+    expect(plans.every((p) => p.source === 'template')).toBe(true)
+    expect(plans.map((p) => p.templateKey)).toEqual(['stronglifts-a', 'stronglifts-b'])
+
+    const strongliftsExercises = store
+      .getExercises()
+      .filter((e) => e.source === 'template')
+      .map((e) => e.name)
+    expect(strongliftsExercises).toEqual([
+      'Squat',
+      'Bench press',
+      'Barbell row',
+      'Overhead press',
+      'Deadlift'
+    ])
+
+    const status = document.querySelector('[data-status]').textContent
+    expect(status).toContain('Installed 2 plans, 5 exercises')
+    expect(document.querySelector('[data-install="stronglifts-5x5"]').disabled).toBe(true)
   })
 })

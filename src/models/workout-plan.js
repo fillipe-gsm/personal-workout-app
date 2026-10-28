@@ -1,4 +1,5 @@
 import { uid } from './id.js'
+import { normalizeEntitySource } from './enums.js'
 import { ExerciseInWorkoutPlan } from './exercise-in-workout-plan.js'
 import { SetScheme } from './set-scheme.js'
 
@@ -6,11 +7,29 @@ import { SetScheme } from './set-scheme.js'
  * A workout program (`workout_plan` table) holding ordered exercise slots.
  * Legacy JSON stored only `exerciseIds`; fromJSON migrates those into slots
  * using each exercise's default scheme.
+ *
+ * Plans can be created by the user or installed from a cookie-cutter template
+ * (`source: 'template'` + `templateKey`/`templateVersion` provenance).
  */
 export class WorkoutPlan {
-  constructor({ id = uid(), name = '', entries = [], createdAt, updatedAt, deletedAt = null } = {}) {
+  constructor({
+    id = uid(),
+    name = '',
+    description = '',
+    source,
+    templateKey = null,
+    templateVersion = null,
+    entries = [],
+    createdAt,
+    updatedAt,
+    deletedAt = null
+  } = {}) {
     this.id = id
     this.name = String(name).trim()
+    this.description = description == null ? '' : String(description)
+    this.source = normalizeEntitySource(source)
+    this.templateKey = templateKey ?? null
+    this.templateVersion = templateVersion ?? null
     this.entries = entries
       .map((e) => (e instanceof ExerciseInWorkoutPlan ? e : ExerciseInWorkoutPlan.fromJSON(e, this.id)))
       .sort((a, b) => a.position - b.position)
@@ -83,10 +102,18 @@ export class WorkoutPlan {
     })
   }
 
+  get isFromTemplate() {
+    return this.source === 'template'
+  }
+
   toJSON() {
     return {
       id: this.id,
       name: this.name,
+      description: this.description,
+      source: this.source,
+      templateKey: this.templateKey,
+      templateVersion: this.templateVersion,
       entries: this.entries.map((e) => e.toJSON()),
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,

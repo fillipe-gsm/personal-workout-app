@@ -99,6 +99,14 @@ select.input { width: 100%; }
 .list-item > span:last-child { display: flex; gap: 6px; align-items: center; }
 .list-item > span:first-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .list-item > span:first-child > .badge { align-self: flex-start; }
+.plan-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
 .plan-scheme-editor { margin: -2px 0 10px; }
 .plan-scheme-editor .ex-controls { grid-template-columns: 1fr 1fr; }
 .plate-unlimited { display: flex; align-items: center; gap: 4px; font-size: 0.9rem; }

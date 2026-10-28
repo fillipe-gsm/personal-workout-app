@@ -3,7 +3,6 @@ import {
   getPlans,
   getExercises,
   getExercise,
-  addPlan,
   deletePlan,
   updatePlan,
   addExerciseToPlan,
@@ -23,7 +22,11 @@ export class PlanList extends ReactiveElement {
     const items = plans.map(
       (plan) => `
         <li class="list-item">
-          <span>${esc(plan.name)} <small class="muted">(${plan.entries.length} exercises)</small></span>
+          <span>
+            <strong>${esc(plan.name)} ${plan.isFromTemplate ? '<small class="badge">Template</small>' : ''}</strong>
+            ${plan.description ? `<small class="muted plan-desc">${esc(plan.description)}</small>` : ''}
+            <small class="muted">(${plan.entries.length} exercises)</small>
+          </span>
           <span>
             <a class="btn btn-primary" href="#/plan/${plan.id}">Edit</a>
             <a class="btn btn-start" href="#/workout/${plan.id}">Start</a>
@@ -34,10 +37,10 @@ export class PlanList extends ReactiveElement {
     return `
       <div class="screen">
         <app-header title="Workout Plans" back="#/"></app-header>
-        <form class="row">
-          <input class="input" type="text" placeholder="New plan name" />
-          <button class="btn btn-primary" type="submit">Add</button>
-        </form>
+        <div class="row" style="margin-bottom:12px">
+          <a class="btn btn-primary" href="#/plans/add">+ Add workout</a>
+          <a class="btn" href="#/templates">Templates</a>
+        </div>
         <ul class="list">
           ${plans.length ? items.join('') : '<li class="empty">No plans yet</li>'}
         </ul>
@@ -46,17 +49,6 @@ export class PlanList extends ReactiveElement {
   }
 
   bind(signal) {
-    this.querySelector('form').addEventListener(
-      'submit',
-      (e) => {
-        e.preventDefault()
-        const input = e.target.querySelector('input')
-        if (!input.value.trim()) return
-        const plan = addPlan(input.value)
-        location.hash = `#/plan/${plan.id}`
-      },
-      { signal }
-    )
     this.querySelector('.list').addEventListener(
       'click',
       (e) => {
@@ -80,10 +72,15 @@ export class PlanEdit extends ReactiveElement {
     return `
       <div class="screen">
         <app-header title="Edit: ${esc(plan.name)}" back="#/plans"></app-header>
-        <div class="row" style="margin-bottom:16px">
+        ${plan.isFromTemplate ? `<p class="muted">Installed from template <strong>${esc(plan.templateKey)}</strong> (v${plan.templateVersion ?? 1}). Edit freely — this is your copy.</p>` : ''}
+        <div class="row" style="margin-bottom:8px">
           <input class="input" type="text" value="${esc(plan.name)}" data-plan-name style="flex:1" />
-          <button class="btn btn-primary" data-save-name>Save name</button>
+          <button class="btn btn-primary" data-save-name>Save</button>
         </div>
+        <label class="field" style="margin-bottom:16px">
+          <span class="field-label">Description</span>
+          <textarea class="input" data-plan-description rows="2" placeholder="Details, notes or a link">${esc(plan.description)}</textarea>
+        </label>
         <div class="section-title">Exercises in this plan (tap to remove)</div>
         <ul class="list">
           ${
@@ -194,8 +191,11 @@ export class PlanEdit extends ReactiveElement {
       if (!input) return
       const next = input.value.trim()
       const current = getPlan(planId)
-      if (!current || !next || next === current.name) return
-      updatePlan(planId, { name: next })
+      if (!current || !next) return
+      const descriptionInput = this.querySelector('[data-plan-description]')
+      const description = descriptionInput ? descriptionInput.value.trim() : current.description
+      if (next === current.name && description === current.description) return
+      updatePlan(planId, { name: next, description })
     }
     this.querySelector('[data-save-name]')?.addEventListener('click', saveName, { signal })
     this.querySelector('[data-plan-name]')?.addEventListener(

@@ -6,6 +6,7 @@ export class HomeMenu extends HTMLElement {
         <nav class="menu">
           <a class="menu-item" href="#/exercises">🏋️ Exercises</a>
           <a class="menu-item" href="#/plans">📋 Workout Plans</a>
+          <a class="menu-item" href="#/templates">🧩 Templates</a>
           <a class="menu-item" href="#/profiles">⚖️ Weight Profiles</a>
           <a class="menu-item" href="#/backup">💾 Backup</a>
         </nav>

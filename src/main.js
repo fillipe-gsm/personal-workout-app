@@ -3,6 +3,8 @@ import { route, start } from './router.js'
 import './components/home-menu.js'
 import './components/exercise-list.js'
 import './components/plans.js'
+import './components/plan-add.js'
+import './components/templates.js'
 import './components/workout-session.js'
 import './components/exercise-history.js'
 import './components/profiles.js'
@@ -20,6 +22,8 @@ function create(tag, attrs = {}) {
 route('/', () => create('home-menu'))
 route('/exercises', () => create('exercise-list'))
 route('/plans', () => create('plan-list'))
+route('/plans/add', () => create('plan-add'))
+route('/templates', () => create('template-list'))
 route('/plan/:id', (params) => create('plan-edit', { 'plan-id': params.id }))
 route('/workout/:id', (params) => create('workout-session', { 'plan-id': params.id }))
 route('/history/:id', (params) => create('exercise-history', { 'exercise-id': params.id }))

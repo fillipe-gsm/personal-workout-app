@@ -14,7 +14,8 @@ import {
   WeightProfile,
   WeightPlate,
   WorkoutSession,
-  WorkoutSet
+  WorkoutSet,
+  EntitySource
 } from './models/index.js'
 
 const KEY = 'workout-app-data'
@@ -35,6 +36,7 @@ export {
   DEFAULT_WARMUP_COUNT,
   DEFAULT_WORK_SETS,
   DEFAULT_TOTAL_REPS,
+  EntitySource,
   uid
 }
 
@@ -218,8 +220,8 @@ export function getExercises() {
 
 // --- Plans and their exercise slots ---------------------------------------
 
-export function addPlan(name) {
-  const plan = new WorkoutPlan({ name })
+export function addPlan(name, { description = '', source = 'user', templateKey = null, templateVersion = null } = {}) {
+  const plan = new WorkoutPlan({ name, description, source, templateKey, templateVersion })
   data.plans.push(plan)
   save()
   return plan
@@ -233,6 +235,7 @@ export function updatePlan(id, patch) {
   const plan = data.plans.find((p) => p.id === id)
   if (!plan) return plan
   if (patch.name != null) plan.name = String(patch.name).trim()
+  if (patch.description !== undefined) plan.description = String(patch.description ?? '')
   if (Array.isArray(patch.exerciseIds)) {
     const existing = new Map(plan.entries.map((e) => [e.exerciseId, e]))
     plan.entries = patch.exerciseIds
@@ -306,6 +309,95 @@ export function getPlan(id) {
 
 export function getPlans() {
   return data.plans
+}
+
+// --- Cookie-cutter templates ----------------------------------------------
+
+/**
+ * Installs a template (see src/templates/*): find-or-creates its exercises by
+ * name and creates any of its plans that are not installed yet.
+ *
+ * Everything is persisted with a single save() (one repaint, no half-installs).
+ * Returns a summary for the UI.
+ */
+export function installTemplate(template) {
+  if (!template?.key) throw new Error('Template key is required')
+  const summary = {
+    templateKey: template.key,
+    createdExercises: [],
+    reusedExercises: [],
+    createdPlans: [],
+    skippedPlans: []
+  }
+  try {
+    const exerciseByName = new Map(data.exercises.map((e) => [e.name.trim().toLowerCase(), e]))
+    const ensureExercise = (spec) => {
+      const key = spec.name.trim().toLowerCase()
+      const existing = exerciseByName.get(key)
+      if (existing) {
+        summary.reusedExercises.push(existing.name)
+        return existing
+      }
+      const exercise = new Exercise({
+        name: spec.name,
+        category: spec.category,
+        setScheme: spec.setScheme,
+        source: EntitySource.TEMPLATE
+      })
+      data.exercises.push(exercise)
+      exerciseByName.set(key, exercise)
+      summary.createdExercises.push(exercise.name)
+      return exercise
+    }
+
+    for (const spec of template.exercises || []) ensureExercise(spec)
+
+    for (const planSpec of template.plans || []) {
+      const planKey = planSpec.key ?? `${template.key}-${planSpec.name}`
+      if (data.plans.some((p) => p.templateKey === planKey)) {
+        summary.skippedPlans.push(planSpec.name)
+        continue
+      }
+      const plan = new WorkoutPlan({
+        name: uniquePlanName(planSpec.name),
+        description: planSpec.description ?? template.description ?? '',
+        source: EntitySource.TEMPLATE,
+        templateKey: planKey,
+        templateVersion: template.version ?? 1
+      })
+      for (const slot of planSpec.slots || []) {
+        const exercise = exerciseByName.get(slot.exercise.trim().toLowerCase())
+        if (!exercise) continue
+        plan.addEntry(exercise.id, SetScheme.fromJSON(slot.setScheme))
+      }
+      data.plans.push(plan)
+      summary.createdPlans.push(plan.name)
+    }
+
+    if (summary.createdPlans.length || summary.createdExercises.length) save()
+    return summary
+  } catch (err) {
+    // Roll back any in-memory changes so a failed install is a no-op.
+    data = load()
+    throw err
+  }
+}
+
+function uniquePlanName(baseName) {
+  const taken = (name) => data.plans.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())
+  const name = String(baseName).trim()
+  if (!taken(name)) return name
+  let candidate = `${name} (template)`
+  let n = 2
+  while (taken(candidate)) candidate = `${name} (template ${n++})`
+  return candidate
+}
+
+/** How much of a template is already installed (for the Templates page). */
+export function templateInstallState(template) {
+  const keys = (template.plans || []).map((p) => p.key ?? `${template.key}-${p.name}`)
+  const installed = keys.filter((key) => data.plans.some((p) => p.templateKey === key)).length
+  return { installed, total: keys.length, complete: keys.length > 0 && installed === keys.length }
 }
 
 // --- Weight profiles -------------------------------------------------------

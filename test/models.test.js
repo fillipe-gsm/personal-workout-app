@@ -150,6 +150,36 @@ describe('WorkoutSession', () => {
   })
 })
 
+describe('provenance and descriptions', () => {
+  it('defaults new rows to user provenance', () => {
+    const ex = new Exercise({ name: 'Squat' })
+    expect(ex.source).toBe('user')
+    expect(ex.isFromTemplate).toBe(false)
+
+    const plan = new WorkoutPlan({ name: 'P' })
+    expect(plan.source).toBe('user')
+    expect(plan.description).toBe('')
+    expect(plan.templateKey).toBeNull()
+    expect(plan.templateVersion).toBeNull()
+  })
+
+  it('round-trips template provenance and descriptions', () => {
+    const plan = new WorkoutPlan({
+      name: 'Stronglifts A',
+      description: 'A day',
+      source: 'template',
+      templateKey: 'stronglifts-a',
+      templateVersion: 2
+    })
+    const restored = WorkoutPlan.fromJSON(JSON.parse(JSON.stringify(plan)))
+    expect(restored.toJSON()).toEqual(plan.toJSON())
+    expect(restored.isFromTemplate).toBe(true)
+
+    const ex = new Exercise({ name: 'Squat', source: 'template' })
+    expect(Exercise.fromJSON(JSON.parse(JSON.stringify(ex))).source).toBe('template')
+  })
+})
+
 describe('WeightProfile', () => {
   it('keeps unlimited plates as Infinity across a JSON round-trip', () => {
     const profile = new WeightProfile({ name: 'Gym', barbellKg: 20, plates: [{ kg: 10, count: Infinity }] })

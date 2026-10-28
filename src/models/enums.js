@@ -37,3 +37,15 @@ export const SetType = Object.freeze({
 })
 
 export const SET_TYPES = Object.values(SetType)
+
+/** Provenance of a row: created by the user or installed from a template. */
+export const EntitySource = Object.freeze({
+  USER: 'user',
+  TEMPLATE: 'template'
+})
+
+export const ENTITY_SOURCES = Object.values(EntitySource)
+
+export function normalizeEntitySource(source) {
+  return ENTITY_SOURCES.includes(source) ? source : EntitySource.USER
+}
