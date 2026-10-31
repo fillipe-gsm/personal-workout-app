@@ -12,7 +12,7 @@ export class TemplateList extends HTMLElement {
   summaryText(summary) {
     const bits = []
     if (summary.createdPlans.length) {
-      bits.push(`${summary.createdPlans.length} plan${summary.createdPlans.length === 1 ? '' : 's'}`)
+      bits.push(`${summary.createdPlans.length} workout${summary.createdPlans.length === 1 ? '' : 's'}`)
     }
     if (summary.createdExercises.length) {
       bits.push(
@@ -39,22 +39,22 @@ export class TemplateList extends HTMLElement {
         <div class="card" data-template="${template.key}">
           <div class="card-title">
             <span>${esc(template.name)}</span>
-            <small class="badge">${template.plans.length} plan${template.plans.length === 1 ? '' : 's'}</small>
+            <small class="badge">${template.plans.length} workout${template.plans.length === 1 ? '' : 's'}</small>
           </div>
           <p class="muted">${linkify(template.description)}</p>
           <p class="muted"><strong>Exercises:</strong> ${exerciseNames}</p>
           ${state.complete ? '<p class="saved-note">✓ Installed</p>' : ''}
           <button class="btn btn-primary" data-install="${template.key}" ${state.complete ? 'disabled' : ''}>
-            ${state.installed ? 'Install remaining plans' : 'Install template'}
+            ${state.installed ? 'Install remaining workouts' : 'Install template'}
           </button>
         </div>`
     })
     this.innerHTML = `
       <div class="screen">
-        <app-header title="Workout Templates" back="#/plans"></app-header>
+        <app-header title="Workout Templates" back="#/programs"></app-header>
         <p class="muted">
           Cookie-cutter programs. Installing one creates its exercises (reusing existing ones by name)
-          and its workout plans; you can edit them afterwards.
+          and its workouts as a program; you can edit them afterwards.
         </p>
         ${cards.join('')}
         ${status ? `<p class="${status.ok ? 'status-ok' : 'status-err'}" data-status role="status">${esc(status.text)}</p>` : ''}

@@ -3,6 +3,7 @@ import {
   SetScheme,
   Exercise,
   WorkoutPlan,
+  WorkoutProgram,
   ExerciseInWorkoutPlan,
   WorkoutSession,
   WorkoutSet,
@@ -160,20 +161,39 @@ describe('provenance and descriptions', () => {
     expect(plan.source).toBe('user')
     expect(plan.description).toBe('')
     expect(plan.templateKey).toBeNull()
-    expect(plan.templateVersion).toBeNull()
+    expect(plan.programId).toBeNull()
+    expect(plan.isStandalone).toBe(true)
+
+    const program = new WorkoutProgram({ name: 'Stronglifts 5×5' })
+    expect(program.source).toBe('user')
+    expect(program.templateKey).toBeNull()
+    expect(program.templateVersion).toBeNull()
   })
 
   it('round-trips template provenance and descriptions', () => {
+    const program = new WorkoutProgram({
+      name: 'Stronglifts 5×5',
+      description: 'Beginner barbell program',
+      source: 'template',
+      templateKey: 'stronglifts-5x5',
+      templateVersion: 2
+    })
+    const restoredProgram = WorkoutProgram.fromJSON(JSON.parse(JSON.stringify(program)))
+    expect(restoredProgram.toJSON()).toEqual(program.toJSON())
+    expect(restoredProgram.isFromTemplate).toBe(true)
+
     const plan = new WorkoutPlan({
       name: 'Stronglifts A',
       description: 'A day',
       source: 'template',
       templateKey: 'stronglifts-a',
-      templateVersion: 2
+      programId: program.id,
+      position: 0
     })
     const restored = WorkoutPlan.fromJSON(JSON.parse(JSON.stringify(plan)))
     expect(restored.toJSON()).toEqual(plan.toJSON())
     expect(restored.isFromTemplate).toBe(true)
+    expect(restored.programId).toBe(program.id)
 
     const ex = new Exercise({ name: 'Squat', source: 'template' })
     expect(Exercise.fromJSON(JSON.parse(JSON.stringify(ex))).source).toBe('template')

@@ -1,9 +1,8 @@
 import {
   getPlan,
-  getPlans,
+  getProgram,
   getExercises,
   getExercise,
-  deletePlan,
   updatePlan,
   addExerciseToPlan,
   updatePlanEntry,
@@ -11,68 +10,25 @@ import {
   movePlanEntry,
   fmtSetScheme
 } from '../store.js'
-import { ReactiveElement, esc, linkify } from './base.js'
+import { ReactiveElement, esc } from './base.js'
 import { schemeTypeOptions, schemeValueLabel, schemeValueDefault, buildScheme } from './scheme-form.js'
 import './header.js'
-
-export class PlanList extends ReactiveElement {
-  template() {
-    const plans = getPlans()
-    const exercises = getExercises()
-    const items = plans.map(
-      (plan) => `
-        <li class="list-item">
-          <span>
-            <strong>${esc(plan.name)} ${plan.isFromTemplate ? '<small class="badge">Template</small>' : ''}</strong>
-            ${plan.description ? `<small class="muted plan-desc">${linkify(plan.description)}</small>` : ''}
-            <small class="muted">(${plan.entries.length} exercises)</small>
-          </span>
-          <span>
-            <a class="btn btn-primary" href="#/plan/${plan.id}">Edit</a>
-            <a class="btn btn-start" href="#/workout/${plan.id}">Start</a>
-            <button class="btn btn-danger" data-delete="${plan.id}" data-name="${esc(plan.name)}">✕</button>
-          </span>
-        </li>`
-    )
-    return `
-      <div class="screen">
-        <app-header title="Workout Plans" back="#/"></app-header>
-        <div class="row" style="margin-bottom:12px">
-          <a class="btn btn-primary" href="#/plans/add">+ Add workout</a>
-          <a class="btn" href="#/templates">Templates</a>
-        </div>
-        <ul class="list">
-          ${plans.length ? items.join('') : '<li class="empty">No plans yet</li>'}
-        </ul>
-        ${exercises.length === 0 ? '<p class="empty">Tip: add some exercises first.</p>' : ''}
-      </div>`
-  }
-
-  bind(signal) {
-    this.querySelector('.list').addEventListener(
-      'click',
-      (e) => {
-        const btn = e.target.closest('[data-delete]')
-        if (!btn) return
-        if (confirm(`Delete plan "${btn.dataset.name}"?`)) deletePlan(btn.dataset.delete)
-      },
-      { signal }
-    )
-  }
-}
 
 export class PlanEdit extends ReactiveElement {
   template() {
     const plan = getPlan(this.getAttribute('plan-id'))
     if (!plan) {
-      return `<div class="screen"><app-header title="Plan not found" back="#/plans"></app-header></div>`
+      return `<div class="screen"><app-header title="Workout not found" back="#/programs"></app-header></div>`
     }
+    const program = plan.programId ? getProgram(plan.programId) : null
+    const back = program ? `#/program/${program.id}` : '#/programs'
     const inPlan = new Set(plan.entries.map((e) => e.exerciseId))
     const available = getExercises().filter((ex) => !inPlan.has(ex.id))
     return `
       <div class="screen">
-        <app-header title="Edit: ${esc(plan.name)}" back="#/plans"></app-header>
-        ${plan.isFromTemplate ? `<p class="muted">Installed from template <strong>${esc(plan.templateKey)}</strong> (v${plan.templateVersion ?? 1}). Edit freely — this is your copy.</p>` : ''}
+        <app-header title="Edit: ${esc(plan.name)}" back="${back}"></app-header>
+        <p class="muted">${program ? `Program: <a href="#/program/${program.id}">${esc(program.name)}</a>` : 'Standalone workout'}</p>
+        ${plan.isFromTemplate ? `<p class="muted">Installed from template <strong>${esc(plan.templateKey)}</strong>. Edit freely — this is your copy.</p>` : ''}
         <div class="row" style="margin-bottom:8px">
           <input class="input" type="text" value="${esc(plan.name)}" data-plan-name style="flex:1" />
           <button class="btn btn-primary" data-save-name>Save</button>
@@ -81,7 +37,7 @@ export class PlanEdit extends ReactiveElement {
           <span class="field-label">Description</span>
           <textarea class="input" data-plan-description rows="2" placeholder="Details, notes or a link">${esc(plan.description)}</textarea>
         </label>
-        <div class="section-title">Exercises in this plan (tap to remove)</div>
+        <div class="section-title">Exercises in this workout (tap to remove)</div>
         <ul class="list">
           ${
             plan.entries.length
@@ -121,7 +77,7 @@ export class PlanEdit extends ReactiveElement {
                       </li>`
                   )
                   .join('')
-              : '<li class="empty">All exercises are in this plan</li>'
+              : '<li class="empty">All exercises are in this workout</li>'
           }
         </ul>
         <a class="btn btn-start big" href="#/workout/${plan.id}">Start this workout</a>
@@ -245,5 +201,4 @@ export class PlanEdit extends ReactiveElement {
   }
 }
 
-if (!customElements.get('plan-list')) customElements.define('plan-list', PlanList)
 if (!customElements.get('plan-edit')) customElements.define('plan-edit', PlanEdit)

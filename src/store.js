@@ -11,12 +11,14 @@ import {
   Exercise,
   ExerciseInWorkoutPlan,
   WorkoutPlan,
+  WorkoutProgram,
   WeightProfile,
   WeightPlate,
   WorkoutSession,
   WorkoutSet,
   EntitySource
 } from './models/index.js'
+import { TEMPLATES } from './templates/index.js'
 
 const KEY = 'workout-app-data'
 
@@ -29,6 +31,7 @@ export {
   Exercise,
   ExerciseInWorkoutPlan,
   WorkoutPlan,
+  WorkoutProgram,
   WeightProfile,
   WeightPlate,
   WorkoutSession,
@@ -71,7 +74,7 @@ export function fmtSetScheme(scheme) {
 }
 
 function emptyData() {
-  return { exercises: [], plans: [], profiles: [], sessions: [] }
+  return { exercises: [], programs: [], plans: [], profiles: [], sessions: [] }
 }
 
 function toDay(value) {
@@ -118,19 +121,97 @@ function migrateLegacyRecords(records = [], exercisesById = new Map()) {
   return sessions
 }
 
+function planTemplateCatalog() {
+  const catalog = new Map()
+  for (const template of TEMPLATES) {
+    for (const plan of template.plans) {
+      catalog.set(plan.key ?? `${template.key}-${plan.name}`, template)
+    }
+  }
+  return catalog
+}
+
+/**
+ * Migrates pre-program data: plans installed from templates (identified by
+ * `templateKey`) are grouped under one program per template; everything else
+ * becomes standalone (programId = null). Positions follow the stored order.
+ */
+function groupLegacyPlans(rawPlans, resolveScheme) {
+  const catalog = planTemplateCatalog()
+  const programs = []
+  const programsByTemplateKey = new Map()
+  const plans = rawPlans.map((raw) => {
+    const plan = WorkoutPlan.fromJSON(raw, resolveScheme)
+    const template = plan.templateKey ? catalog.get(plan.templateKey) : null
+    if (template) {
+      let program = programsByTemplateKey.get(template.key)
+      if (!program) {
+        program = new WorkoutProgram({
+          name: template.name,
+          description: template.description,
+          source: EntitySource.TEMPLATE,
+          templateKey: template.key,
+          templateVersion: raw.templateVersion ?? template.version ?? 1
+        })
+        programsByTemplateKey.set(template.key, program)
+        programs.push(program)
+      }
+      plan.programId = program.id
+    }
+    return plan
+  })
+  const counters = new Map()
+  for (const plan of plans) {
+    const key = plan.programId ?? ''
+    plan.position = counters.get(key) ?? 0
+    counters.set(key, plan.position + 1)
+  }
+  return { programs, plans }
+}
+
 function normalize(raw) {
   const source = raw && typeof raw === 'object' ? raw : {}
   const exercises = (Array.isArray(source.exercises) ? source.exercises : []).map(Exercise.fromJSON)
   const byId = new Map(exercises.map((e) => [e.id, e]))
-  const plans = (Array.isArray(source.plans) ? source.plans : []).map((p) =>
-    WorkoutPlan.fromJSON(p, (exerciseId) => byId.get(exerciseId)?.setScheme)
-  )
+  const resolveScheme = (exerciseId) => byId.get(exerciseId)?.setScheme
+  const rawPlans = Array.isArray(source.plans) ? source.plans : []
+
+  let programs
+  let plans
+  if (Array.isArray(source.programs)) {
+    programs = source.programs.map(WorkoutProgram.fromJSON)
+    plans = rawPlans.map((p) => WorkoutPlan.fromJSON(p, resolveScheme))
+    // Fill in positions only where they were not stored (older partial data).
+    const counters = new Map()
+    plans.forEach((plan, i) => {
+      const key = plan.programId ?? ''
+      if (rawPlans[i]?.position == null) plan.position = counters.get(key) ?? 0
+      counters.set(key, Math.max(counters.get(key) ?? 0, plan.position + 1))
+    })
+  } else {
+    ;({ programs, plans } = groupLegacyPlans(rawPlans, resolveScheme))
+  }
+
   const profiles = (Array.isArray(source.profiles) ? source.profiles : []).map(WeightProfile.fromJSON)
   const sessions =
     Array.isArray(source.sessions) && source.sessions.length > 0
       ? source.sessions.map(WorkoutSession.fromJSON)
       : migrateLegacyRecords(Array.isArray(source.records) ? source.records : [], byId)
-  return { exercises, plans, profiles, sessions }
+
+  // Backfill the program snapshot for sessions stored before programs existed.
+  if (plans.length && programs.length) {
+    const planById = new Map(plans.map((p) => [p.id, p]))
+    const programById = new Map(programs.map((p) => [p.id, p]))
+    for (const session of sessions) {
+      if (session.programName != null || !session.planId) continue
+      const plan = planById.get(session.planId)
+      if (!plan?.programId) continue
+      session.programId = plan.programId
+      session.programName = programById.get(plan.programId)?.name ?? null
+    }
+  }
+
+  return { exercises, programs, plans, profiles, sessions }
 }
 
 export function load() {
@@ -154,6 +235,7 @@ export function save() {
     KEY,
     JSON.stringify({
       exercises: data.exercises,
+      programs: data.programs,
       plans: data.plans,
       profiles: data.profiles,
       sessions: data.sessions
@@ -218,10 +300,99 @@ export function getExercises() {
   return data.exercises
 }
 
-// --- Plans and their exercise slots ---------------------------------------
+// --- Programs and their plans ---------------------------------------------
 
-export function addPlan(name, { description = '', source = 'user', templateKey = null, templateVersion = null } = {}) {
-  const plan = new WorkoutPlan({ name, description, source, templateKey, templateVersion })
+function nextPlanPosition(programId) {
+  const siblings = data.plans.filter((p) => (p.programId ?? null) === (programId ?? null))
+  return siblings.reduce((max, p) => Math.max(max, p.position + 1), 0)
+}
+
+function uniquePlanName(baseName, programId, excludeId = null) {
+  const inScope = data.plans.filter(
+    (p) => p.id !== excludeId && (p.programId ?? null) === (programId ?? null)
+  )
+  const taken = (name) => inScope.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())
+  const name = String(baseName).trim()
+  if (!taken(name)) return name
+  let candidate = `${name} (2)`
+  let n = 3
+  while (taken(candidate)) candidate = `${name} (${n++})`
+  return candidate
+}
+
+function uniqueProgramName(baseName, excludeId = null) {
+  const taken = (name) =>
+    data.programs.some((p) => p.id !== excludeId && p.name.trim().toLowerCase() === name.toLowerCase())
+  const name = String(baseName).trim()
+  if (!taken(name)) return name
+  let candidate = `${name} (2)`
+  let n = 3
+  while (taken(candidate)) candidate = `${name} (${n++})`
+  return candidate
+}
+
+export function addProgram(
+  name,
+  { description = '', source = 'user', templateKey = null, templateVersion = null } = {}
+) {
+  const program = new WorkoutProgram({
+    name: uniqueProgramName(name),
+    description,
+    source,
+    templateKey,
+    templateVersion
+  })
+  data.programs.push(program)
+  save()
+  return program
+}
+
+export function updateProgram(id, patch) {
+  const program = data.programs.find((p) => p.id === id)
+  if (!program) return program
+  if (patch.name != null) program.name = uniqueProgramName(patch.name, id)
+  if (patch.description !== undefined) program.description = String(patch.description ?? '')
+  program.updatedAt = new Date().toISOString()
+  save()
+  return program
+}
+
+/**
+ * Deletes a program but keeps its workouts: they become standalone.
+ */
+export function deleteProgram(id) {
+  const program = data.programs.find((p) => p.id === id)
+  if (!program) return
+  data.programs = data.programs.filter((p) => p.id !== id)
+  for (const plan of data.plans.filter((p) => p.programId === id)) {
+    plan.programId = null
+    plan.position = nextPlanPosition(null)
+    plan.updatedAt = new Date().toISOString()
+  }
+  save()
+}
+
+export function getPrograms() {
+  return data.programs
+}
+
+export function getProgram(id) {
+  return data.programs.find((p) => p.id === id)
+}
+
+export function addPlan(
+  name,
+  { description = '', source = 'user', templateKey = null, programId = null } = {}
+) {
+  const pid = programId ?? null
+  const plan = new WorkoutPlan({
+    name: uniquePlanName(name, pid),
+    description,
+    source,
+    templateKey,
+    programId: pid,
+    position: nextPlanPosition(pid)
+  })
   data.plans.push(plan)
   save()
   return plan
@@ -234,8 +405,15 @@ export function addPlan(name, { description = '', source = 'user', templateKey =
 export function updatePlan(id, patch) {
   const plan = data.plans.find((p) => p.id === id)
   if (!plan) return plan
-  if (patch.name != null) plan.name = String(patch.name).trim()
+  if (patch.name != null) plan.name = uniquePlanName(patch.name, plan.programId, plan.id)
   if (patch.description !== undefined) plan.description = String(patch.description ?? '')
+  if (patch.programId !== undefined) {
+    const nextProgramId = patch.programId ?? null
+    if (nextProgramId !== (plan.programId ?? null)) {
+      plan.programId = nextProgramId
+      plan.position = nextPlanPosition(nextProgramId)
+    }
+  }
   if (Array.isArray(patch.exerciseIds)) {
     const existing = new Map(plan.entries.map((e) => [e.exerciseId, e]))
     plan.entries = patch.exerciseIds
@@ -311,11 +489,23 @@ export function getPlans() {
   return data.plans
 }
 
+/** Plans of a program, in display order. */
+export function getPlansForProgram(programId) {
+  return data.plans
+    .filter((p) => p.programId === programId)
+    .sort((a, b) => a.position - b.position)
+}
+
+/** Plans not attached to any program, in display order. */
+export function getStandalonePlans() {
+  return data.plans.filter((p) => p.programId == null).sort((a, b) => a.position - b.position)
+}
+
 // --- Cookie-cutter templates ----------------------------------------------
 
 /**
- * Installs a template (see src/templates/*): find-or-creates its exercises by
- * name and creates any of its plans that are not installed yet.
+ * Installs a template (see src/templates/*): creates/reuses its program, its
+ * exercises (by name) and any workouts that are not installed yet.
  *
  * Everything is persisted with a single save() (one repaint, no half-installs).
  * Returns a summary for the UI.
@@ -324,12 +514,30 @@ export function installTemplate(template) {
   if (!template?.key) throw new Error('Template key is required')
   const summary = {
     templateKey: template.key,
+    programId: null,
+    programName: null,
+    createdProgram: null,
     createdExercises: [],
     reusedExercises: [],
     createdPlans: [],
     skippedPlans: []
   }
   try {
+    let program = data.programs.find((p) => p.templateKey === template.key)
+    if (!program) {
+      program = new WorkoutProgram({
+        name: uniqueProgramName(template.name),
+        description: template.description ?? '',
+        source: EntitySource.TEMPLATE,
+        templateKey: template.key,
+        templateVersion: template.version ?? 1
+      })
+      data.programs.push(program)
+      summary.createdProgram = program.name
+    }
+    summary.programId = program.id
+    summary.programName = program.name
+
     const exerciseByName = new Map(data.exercises.map((e) => [e.name.trim().toLowerCase(), e]))
     const ensureExercise = (spec) => {
       const key = spec.name.trim().toLowerCase()
@@ -352,18 +560,19 @@ export function installTemplate(template) {
 
     for (const spec of template.exercises || []) ensureExercise(spec)
 
-    for (const planSpec of template.plans || []) {
+    ;(template.plans || []).forEach((planSpec, index) => {
       const planKey = planSpec.key ?? `${template.key}-${planSpec.name}`
-      if (data.plans.some((p) => p.templateKey === planKey)) {
+      if (data.plans.some((p) => p.programId === program.id && p.templateKey === planKey)) {
         summary.skippedPlans.push(planSpec.name)
-        continue
+        return
       }
       const plan = new WorkoutPlan({
-        name: uniquePlanName(planSpec.name),
+        name: uniquePlanName(planSpec.name, program.id),
         description: planSpec.description ?? template.description ?? '',
         source: EntitySource.TEMPLATE,
         templateKey: planKey,
-        templateVersion: template.version ?? 1
+        programId: program.id,
+        position: index
       })
       for (const slot of planSpec.slots || []) {
         const exercise = exerciseByName.get(slot.exercise.trim().toLowerCase())
@@ -372,9 +581,9 @@ export function installTemplate(template) {
       }
       data.plans.push(plan)
       summary.createdPlans.push(plan.name)
-    }
+    })
 
-    if (summary.createdPlans.length || summary.createdExercises.length) save()
+    if (summary.createdProgram || summary.createdPlans.length || summary.createdExercises.length) save()
     return summary
   } catch (err) {
     // Roll back any in-memory changes so a failed install is a no-op.
@@ -383,20 +592,14 @@ export function installTemplate(template) {
   }
 }
 
-function uniquePlanName(baseName) {
-  const taken = (name) => data.plans.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())
-  const name = String(baseName).trim()
-  if (!taken(name)) return name
-  let candidate = `${name} (template)`
-  let n = 2
-  while (taken(candidate)) candidate = `${name} (template ${n++})`
-  return candidate
-}
-
 /** How much of a template is already installed (for the Templates page). */
 export function templateInstallState(template) {
+  const program = data.programs.find((p) => p.templateKey === template.key)
   const keys = (template.plans || []).map((p) => p.key ?? `${template.key}-${p.name}`)
-  const installed = keys.filter((key) => data.plans.some((p) => p.templateKey === key)).length
+  const installed = program
+    ? keys.filter((key) => data.plans.some((p) => p.programId === program.id && p.templateKey === key))
+        .length
+    : 0
   return { installed, total: keys.length, complete: keys.length > 0 && installed === keys.length }
 }
 
@@ -456,8 +659,17 @@ export function addRecord(record) {
     (s) => s.performedOn === day && (s.planId ?? null) === planId && !s.deletedAt
   )
   if (!session) {
-    session = new WorkoutSession({ performedOn: day, planId, planName: record.planName ?? null })
+    session = new WorkoutSession({
+      performedOn: day,
+      planId,
+      planName: record.planName ?? null,
+      programId: record.programId ?? null,
+      programName: record.programName ?? null
+    })
     data.sessions.push(session)
+  } else if (session.programName == null && record.programName != null) {
+    session.programId = record.programId ?? null
+    session.programName = record.programName
   }
   let entry = session.findExercise(record.exerciseId)
   if (entry) {
@@ -538,12 +750,13 @@ export function getSessions() {
 
 // --- Backup ----------------------------------------------------------------
 
-export const BACKUP_VERSION = 2
+export const BACKUP_VERSION = 3
 
 function exportShape() {
   return JSON.parse(
     JSON.stringify({
       exercises: data.exercises,
+      programs: data.programs,
       plans: data.plans,
       profiles: data.profiles,
       sessions: data.sessions
@@ -555,6 +768,7 @@ function backupSummary(payload) {
   return {
     exportedAt: payload.exportedAt ?? null,
     exercises: payload.data.exercises.length,
+    programs: payload.data.programs.length,
     plans: payload.data.plans.length,
     profiles: payload.data.profiles.length,
     sessions: payload.data.sessions.length
@@ -566,12 +780,14 @@ function validateBackupPayload(payload) {
     throw new Error('Not a workout backup file.')
   }
   const isEnvelope = payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
-  const hasBareKey = ['exercises', 'plans', 'profiles', 'sessions', 'records'].some((k) => k in payload)
+  const hasBareKey = ['exercises', 'programs', 'plans', 'profiles', 'sessions', 'records'].some(
+    (k) => k in payload
+  )
   if (!isEnvelope && !hasBareKey) throw new Error('Not a workout backup file.')
   const envelope = isEnvelope ? payload : null
   const raw = isEnvelope ? payload.data : payload
   const d = { ...emptyData(), ...raw }
-  for (const key of ['exercises', 'plans', 'profiles']) {
+  for (const key of ['exercises', 'programs', 'plans', 'profiles']) {
     if (!Array.isArray(d[key])) throw new Error('Backup is missing valid data.')
     if (!d[key].every((item) => item && typeof item === 'object')) {
       throw new Error('Backup contains invalid entries.')

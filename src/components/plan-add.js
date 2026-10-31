@@ -1,11 +1,15 @@
-import { addPlan } from '../store.js'
+import { addPlan, getProgram } from '../store.js'
 import './header.js'
 
 export class PlanAdd extends HTMLElement {
   connectedCallback() {
+    const programId = this.getAttribute('program-id')
+    const program = programId ? getProgram(programId) : null
+    const back = program ? `#/program/${program.id}` : '#/programs'
     this.innerHTML = `
       <div class="screen">
-        <app-header title="Add Workout" back="#/plans"></app-header>
+        <app-header title="Add Workout" back="${back}"></app-header>
+        ${program ? `<p class="muted">Adding to program: <strong>${program.name}</strong></p>` : '<p class="muted">Standalone workout (not part of a program).</p>'}
         <form class="col">
           <label class="field">
             <span class="field-label">Name</span>
@@ -25,7 +29,7 @@ export class PlanAdd extends HTMLElement {
       const name = this.querySelector('[name="name"]').value.trim()
       const description = this.querySelector('[name="description"]').value.trim()
       if (!name) return
-      const plan = addPlan(name, { description })
+      const plan = addPlan(name, { description, programId: program?.id ?? null })
       location.replace(`#/plan/${plan.id}`)
     })
   }

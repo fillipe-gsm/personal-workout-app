@@ -11,6 +11,7 @@ vi.stubGlobal('localStorage', {
 
 const store = await import('../src/store.js')
 await import('../src/components/plans.js')
+await import('../src/components/programs.js')
 import { STRONGLIFTS_5X5 } from '../src/templates/index.js'
 
 beforeEach(() => {
@@ -158,28 +159,66 @@ describe('plan details and templates UI', () => {
     expect(store.getPlan(plan.id).description).toBe('Details from the edit page')
   })
 
-  it('shows description excerpts and template badges in the plans list', async () => {
+  it('creates a workout inside a program when opened from the program page', async () => {
+    const program = store.addProgram('Upper/Lower')
+    await import('../src/components/plan-add.js')
+    const el = document.createElement('plan-add')
+    el.setAttribute('program-id', program.id)
+    document.body.append(el)
+
+    const form = el.querySelector('form')
+    form.querySelector('[name="name"]').value = 'Upper A'
+    form.querySelector('[name="description"]').value = 'Chest and back'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    const plans = store.getPlansForProgram(program.id)
+    expect(plans).toHaveLength(1)
+    expect(plans[0].name).toBe('Upper A')
+    expect(plans[0].programId).toBe(program.id)
+    expect(plans[0].description).toBe('Chest and back')
+  })
+
+  it('shows programs with description excerpts and template badges', async () => {
     store.addPlan('Custom plan', { description: 'My own details' })
     store.installTemplate(STRONGLIFTS_5X5)
-    document.body.append(document.createElement('plan-list'))
+    document.body.append(document.createElement('program-list'))
 
-    expect(document.querySelector('.plan-desc').textContent).toBe('My own details')
-    const badges = [...document.querySelectorAll('.badge')].map((b) => b.textContent.trim())
-    expect(badges).toContain('Template')
+    const programCard = document.querySelector('[data-program]')
+    expect(programCard.textContent).toContain('Stronglifts 5×5')
+    expect(programCard.querySelector('.badge').textContent.trim()).toBe('Template')
+    expect(programCard.querySelector('.plan-desc').textContent).toContain('Popular barbell')
+
+    const standalone = document.querySelector('.list-item .plan-desc')
+    expect(standalone.textContent).toBe('My own details')
   })
 
   it('renders description URLs as safe links', async () => {
     store.addPlan('Linked plan', { description: 'Read https://example.com/program.' })
-    document.body.append(document.createElement('plan-list'))
+    document.body.append(document.createElement('program-list'))
 
-    const link = document.querySelector('.plan-desc a')
+    const link = document.querySelector('.list-item .plan-desc a')
     expect(link).toBeTruthy()
     expect(link.getAttribute('href')).toBe('https://example.com/program')
     expect(link.getAttribute('target')).toBe('_blank')
     expect(link.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('installs a template from the templates page', async () => {
+  it('lists a program’s workouts on its page', async () => {
+    const program = store.addProgram('My Program', { description: 'A split' })
+    store.addPlan('Day 1', { programId: program.id })
+    store.addPlan('Day 2', { programId: program.id })
+
+    const el = document.createElement('program-page')
+    el.setAttribute('program-id', program.id)
+    document.body.append(el)
+
+    const names = [...el.querySelectorAll('.list-item strong')].map((n) => n.textContent.trim())
+    expect(names).toEqual(['Day 1', 'Day 2'])
+    expect(el.querySelector(`a[href="#/plans/add?program=${program.id}"]`)).toBeTruthy()
+  })
+
+  it('installs a template from the templates page as a program', async () => {
     await import('../src/components/templates.js')
     document.body.append(document.createElement('template-list'))
 
@@ -193,7 +232,12 @@ describe('plan details and templates UI', () => {
     button.click()
     await Promise.resolve()
 
-    const plans = store.getPlans()
+    const programs = store.getPrograms()
+    expect(programs).toHaveLength(1)
+    expect(programs[0].templateKey).toBe('stronglifts-5x5')
+    expect(programs[0].source).toBe('template')
+
+    const plans = store.getPlansForProgram(programs[0].id)
     expect(plans).toHaveLength(2)
     expect(plans.every((p) => p.source === 'template')).toBe(true)
     expect(plans.map((p) => p.templateKey)).toEqual(['stronglifts-a', 'stronglifts-b'])
@@ -211,7 +255,7 @@ describe('plan details and templates UI', () => {
     ])
 
     const status = document.querySelector('[data-status]').textContent
-    expect(status).toContain('Installed 2 plans, 5 exercises')
+    expect(status).toContain('Installed 2 workouts, 5 exercises')
     expect(document.querySelector('[data-install="stronglifts-5x5"]').disabled).toBe(true)
   })
 })

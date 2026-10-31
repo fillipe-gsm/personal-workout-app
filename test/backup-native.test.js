@@ -56,7 +56,7 @@ describe('native backup export', () => {
     expect(options.path).toMatch(/^workout-backup-\d{8}-\d{4}\.json$/)
 
     const payload = JSON.parse(options.data)
-    expect(payload.version).toBe(2)
+    expect(payload.version).toBe(3)
     expect(payload.data.exercises).toHaveLength(1)
 
     const status = document.querySelector('[data-status]')

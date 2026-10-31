@@ -82,7 +82,8 @@ export class BackupView extends HTMLElement {
   summaryText(s) {
     const bits = [
       `${s.exercises} exercise${s.exercises === 1 ? '' : 's'}`,
-      `${s.plans} plan${s.plans === 1 ? '' : 's'}`,
+      `${s.programs} program${s.programs === 1 ? '' : 's'}`,
+      `${s.plans} workout${s.plans === 1 ? '' : 's'}`,
       `${s.profiles} profile${s.profiles === 1 ? '' : 's'}`,
       `${s.sessions} session${s.sessions === 1 ? '' : 's'}`
     ]
@@ -97,7 +98,7 @@ export class BackupView extends HTMLElement {
         <app-header title="Backup" back="#/"></app-header>
         <div class="card">
           <div class="card-title">Export</div>
-          <p class="muted">Saves every exercise, plan, weight profile and workout session to a single JSON file in your Documents folder.</p>
+          <p class="muted">Saves every exercise, program, workout, weight profile and workout session to a single JSON file in your Documents folder.</p>
           <div class="backup-actions">
             <button class="btn" data-export>Download backup</button>
             ${this._shareOk ? '<button class="btn" data-share>Share backup…</button>' : ''}

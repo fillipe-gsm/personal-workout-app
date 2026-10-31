@@ -1,4 +1,4 @@
-import { getPlan, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isBodyweight, fmtSetScheme, SetScheme } from '../store.js'
+import { getPlan, getProgram, getExercise, addRecord, findRecordForExerciseOnDate, updateRecord, isBarbell, isBodyweight, fmtSetScheme, SetScheme } from '../store.js'
 import { warmupWeights } from '../plates.js'
 import { esc } from './base.js'
 import './header.js'
@@ -368,12 +368,15 @@ export class ExerciseSetBlock extends HTMLElement {
     const notePayload = (this.note || '').trim()
     const planId = session?.getAttribute('plan-id') ?? null
     const plan = planId ? getPlan(planId) : null
+    const program = plan?.programId ? getProgram(plan.programId) : null
     const snapshot = {
       setScheme: this.performedScheme ?? this.scheme,
       trainingWeightKg: this.workingWeight(),
       planId,
       planName: plan?.name ?? null,
-      planEntryId: this.entry?.id ?? null
+      planEntryId: this.entry?.id ?? null,
+      programId: plan?.programId ?? null,
+      programName: program?.name ?? null
     }
     if (existing) {
       if (!confirm('There is a record for this exercise in this day already. Update it?')) return

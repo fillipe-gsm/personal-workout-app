@@ -2,7 +2,7 @@
 
 This page describes existing and popular programs that may come pre-made so users won't have to always create their own.
 
-The idea is that, if a given workout is to be implemented, it will also create all the required exercises for it. If the exercise already exists with this name, skip it.
+The idea is that, if a given workout program is to be implemented, it will also create all the required exercises for it and group its workouts under a program. If the exercise already exists with this name, skip it.
 
 ## Stronglifts 5x5
 
@@ -226,6 +226,8 @@ Every lift is 3×5+, with the last set being AMRAP (not modelled; 3 working sets
 
 ## Template conventions (as implemented)
 
+- Workout programs group related workouts (e.g. "Stronglifts 5×5" contains Workout A and B). Workouts can also exist without a program (standalone) — deleting a program detaches its workouts instead of deleting them.
+- Installing a template creates a single program containing all of its workouts; exercises are reused by name.
 - Exercise names live in a single shared catalog: `src/templates/exercises.js`. Templates only reference those entries, so the same movement always has the same name and is reused across templates when installed.
 - Names use sentence case: only the first letter is capitalised (acronyms/proper nouns aside), e.g. `Barbell row`, `One-arm dumbbell row`.
 - Where a program offers alternatives, the first option is used. The user can swap or add exercises in the installed plan.

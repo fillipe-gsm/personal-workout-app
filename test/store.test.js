@@ -181,18 +181,29 @@ describe('plan details and templates', () => {
     expect(store.getPlan(plan.id).description).toBe('Pull day')
   })
 
-  it('installs template exercises and plans with provenance and slot schemes', () => {
+  it('installs template exercises and workouts with provenance and slot schemes', () => {
     const summary = store.installTemplate(template)
 
+    expect(summary.createdProgram).toBe('Test Template')
+    expect(summary.programName).toBe('Test Template')
     expect(summary.createdExercises).toEqual(['Squat', 'Deadlift'])
     expect(summary.createdPlans).toEqual(['Test A', 'Test B'])
 
-    const plans = store.getPlans()
+    const programs = store.getPrograms()
+    expect(programs).toHaveLength(1)
+    const program = programs[0]
+    expect(program.name).toBe('Test Template')
+    expect(program.source).toBe('template')
+    expect(program.templateKey).toBe('test-tpl')
+    expect(program.templateVersion).toBe(3)
+    expect(program.description).toBe('Template description')
+
+    const plans = store.getPlansForProgram(program.id)
     expect(plans.map((p) => p.name)).toEqual(['Test A', 'Test B'])
+    expect(plans.map((p) => p.position)).toEqual([0, 1])
     expect(plans[0].source).toBe('template')
     expect(plans[0].isFromTemplate).toBe(true)
     expect(plans[0].templateKey).toBe('test-a')
-    expect(plans[0].templateVersion).toBe(3)
     expect(plans[0].description).toBe('A day')
     expect(plans[1].description).toBe('Template description') // falls back to template description
 
@@ -210,13 +221,15 @@ describe('plan details and templates', () => {
     expect(store.getExercises().every((e) => e.source === 'template')).toBe(true)
   })
 
-  it('is idempotent: reinstalling skips plans that already exist', () => {
+  it('is idempotent: reinstalling reuses the program and skips existing workouts', () => {
     store.installTemplate(template)
     const again = store.installTemplate(template)
 
+    expect(again.createdProgram).toBeNull()
     expect(again.createdPlans).toEqual([])
     expect(again.createdExercises).toEqual([])
     expect(again.skippedPlans).toEqual(['Test A', 'Test B'])
+    expect(store.getPrograms()).toHaveLength(1)
     expect(store.getPlans()).toHaveLength(2)
     expect(store.getExercises()).toHaveLength(2)
   })
@@ -245,16 +258,119 @@ describe('plan details and templates', () => {
     expect(plan.entries[0].setScheme.workSets).toBe(5)
   })
 
-  it('disambiguates a plan name that already exists', () => {
-    store.addPlan('Test A')
+  it('scopes workout names to their program', () => {
+    const standalone = store.addPlan('Test A')
     store.installTemplate(template)
-    expect(store.getPlans().map((p) => p.name)).toEqual(['Test A', 'Test A (template)', 'Test B'])
+    const program = store.getPrograms()[0]
+
+    // Different scopes may share a name.
+    expect(standalone.name).toBe('Test A')
+    expect(store.getPlansForProgram(program.id).map((p) => p.name)).toEqual(['Test A', 'Test B'])
+
+    // Within the same program, duplicates are disambiguated.
+    const duplicate = store.addPlan('Test A', { programId: program.id })
+    expect(duplicate.name).toBe('Test A (2)')
   })
 
   it('reports how much of a template is installed', () => {
     expect(store.templateInstallState(template)).toEqual({ installed: 0, total: 2, complete: false })
     store.installTemplate(template)
     expect(store.templateInstallState(template)).toEqual({ installed: 2, total: 2, complete: true })
+  })
+})
+
+describe('programs', () => {
+  it('creates programs, groups workouts and keeps standalone ones', () => {
+    const program = store.addProgram('My Program', { description: 'A split' })
+    const day1 = store.addPlan('Day 1', { programId: program.id })
+    const day2 = store.addPlan('Day 2', { programId: program.id })
+    const loose = store.addPlan('One-off')
+
+    expect(store.getPrograms()).toHaveLength(1)
+    expect(store.getProgram(program.id).description).toBe('A split')
+    expect(store.getPlansForProgram(program.id).map((p) => p.name)).toEqual(['Day 1', 'Day 2'])
+    expect([day1.position, day2.position]).toEqual([0, 1])
+    expect(loose.programId).toBeNull()
+    expect(store.getStandalonePlans().map((p) => p.name)).toEqual(['One-off'])
+
+    store.updateProgram(program.id, { name: 'Renamed' })
+    expect(store.getProgram(program.id).name).toBe('Renamed')
+  })
+
+  it('deleting a program detaches its workouts instead of deleting them', () => {
+    const program = store.addProgram('Temp')
+    store.addPlan('Day 1', { programId: program.id })
+    store.addPlan('Day 2', { programId: program.id })
+    store.addPlan('Loose')
+
+    store.deleteProgram(program.id)
+
+    expect(store.getProgram(program.id)).toBeUndefined()
+    expect(store.getStandalonePlans().map((p) => p.name).sort()).toEqual(['Day 1', 'Day 2', 'Loose'])
+    expect(store.getPlans()).toHaveLength(3)
+  })
+
+  it('moves a workout between programs and standalone', () => {
+    const a = store.addProgram('A')
+    const b = store.addProgram('B')
+    const plan = store.addPlan('Day 1', { programId: a.id })
+
+    store.updatePlan(plan.id, { programId: b.id })
+    expect(store.getPlansForProgram(b.id).map((p) => p.name)).toEqual(['Day 1'])
+    expect(store.getPlansForProgram(a.id)).toHaveLength(0)
+
+    store.updatePlan(plan.id, { programId: null })
+    expect(store.getStandalonePlans().map((p) => p.name)).toEqual(['Day 1'])
+  })
+
+  it('stores the program snapshot on sessions created from a program workout', () => {
+    const program = store.addProgram('Snapshot Program')
+    const plan = store.addPlan('Day 1', { programId: program.id })
+    const ex = store.addExercise('Squat')
+    const date = '2026-03-01T12:00:00.000Z'
+
+    store.addRecord({
+      exerciseId: ex.id,
+      date,
+      planId: plan.id,
+      planName: plan.name,
+      programId: program.id,
+      programName: program.name,
+      sets: [{ type: 'working', weightKg: 100, reps: 5 }]
+    })
+
+    const session = store.getSessions()[0]
+    expect(session.programId).toBe(program.id)
+    expect(session.programName).toBe('Snapshot Program')
+    expect(session.planName).toBe('Day 1')
+  })
+
+  it('migrates legacy plans with template keys into their template program', async () => {
+    storage.set(
+      'workout-app-data',
+      JSON.stringify({
+        exercises: [{ id: 'e1', name: 'Squat', category: 'Barbell' }],
+        plans: [
+          { id: 'p1', name: 'Stronglifts A', templateKey: 'stronglifts-a', templateVersion: 1 },
+          { id: 'p2', name: 'Stronglifts B', templateKey: 'stronglifts-b', templateVersion: 1 },
+          { id: 'p3', name: 'My own workout' }
+        ],
+        profiles: [],
+        sessions: []
+      })
+    )
+    vi.resetModules()
+    const fresh = await import('../src/store.js')
+
+    const programs = fresh.getPrograms()
+    expect(programs).toHaveLength(1)
+    expect(programs[0].templateKey).toBe('stronglifts-5x5')
+    expect(programs[0].name).toBe('Stronglifts 5×5')
+    expect(fresh.getPlansForProgram(programs[0].id).map((p) => p.name)).toEqual([
+      'Stronglifts A',
+      'Stronglifts B'
+    ])
+    expect(fresh.getStandalonePlans().map((p) => p.name)).toEqual(['My own workout'])
   })
 })
 
@@ -389,7 +505,7 @@ describe('backup export/import', () => {
     expect(store.getData().exercises).toHaveLength(0)
 
     const { payload, summary } = store.previewBackup(JSON.stringify(file))
-    expect(summary).toMatchObject({ exercises: 1, plans: 1, profiles: 1, sessions: 1 })
+    expect(summary).toMatchObject({ exercises: 1, programs: 0, plans: 1, profiles: 1, sessions: 1 })
     expect(summary.exportedAt).toBeTruthy()
     const result = store.importBackup(payload)
     expect(result).toEqual(summary)
@@ -415,7 +531,7 @@ describe('backup export/import', () => {
     // A well-formed but empty envelope previews with zero counts; data is
     // only replaced on explicit import, so previewing leaves data untouched.
     const empty = store.previewBackup('{"data":{}}')
-    expect(empty.summary).toMatchObject({ exercises: 0, plans: 0, profiles: 0, sessions: 0 })
+    expect(empty.summary).toMatchObject({ exercises: 0, programs: 0, plans: 0, profiles: 0, sessions: 0 })
     expect(JSON.stringify(store.getData())).toBe(before)
   })
 

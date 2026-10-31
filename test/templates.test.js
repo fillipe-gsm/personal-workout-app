@@ -118,6 +118,7 @@ describe('template catalog', () => {
 
     const expectedPlans = TEMPLATES.reduce((sum, t) => sum + t.plans.length, 0)
     expect(store.getPlans()).toHaveLength(expectedPlans)
+    expect(store.getPrograms()).toHaveLength(TEMPLATES.length)
 
     for (const plan of store.getPlans()) {
       expect(plan.source).toBe('template')
@@ -128,8 +129,12 @@ describe('template catalog', () => {
     }
 
     for (const template of TEMPLATES) {
+      const program = store.getPrograms().find((p) => p.templateKey === template.key)
+      expect(program, `missing program for ${template.key}`).toBeTruthy()
+      expect(program.source).toBe('template')
+      expect(program.templateVersion).toBe(template.version)
+      expect(store.getPlansForProgram(program.id).map((p) => p.name)).toEqual(planNames(template))
       expect(store.templateInstallState(template).complete).toBe(true)
-      expect(planNames(template).every((n) => store.getPlans().some((p) => p.name === n))).toBe(true)
     }
   })
 

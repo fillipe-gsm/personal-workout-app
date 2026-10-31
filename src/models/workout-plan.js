@@ -18,7 +18,8 @@ export class WorkoutPlan {
     description = '',
     source,
     templateKey = null,
-    templateVersion = null,
+    programId = null,
+    position = 0,
     entries = [],
     createdAt,
     updatedAt,
@@ -29,7 +30,8 @@ export class WorkoutPlan {
     this.description = description == null ? '' : String(description)
     this.source = normalizeEntitySource(source)
     this.templateKey = templateKey ?? null
-    this.templateVersion = templateVersion ?? null
+    this.programId = programId ?? null
+    this.position = Number.isFinite(position) ? position : 0
     this.entries = entries
       .map((e) => (e instanceof ExerciseInWorkoutPlan ? e : ExerciseInWorkoutPlan.fromJSON(e, this.id)))
       .sort((a, b) => a.position - b.position)
@@ -106,6 +108,10 @@ export class WorkoutPlan {
     return this.source === 'template'
   }
 
+  get isStandalone() {
+    return this.programId == null
+  }
+
   toJSON() {
     return {
       id: this.id,
@@ -113,7 +119,8 @@ export class WorkoutPlan {
       description: this.description,
       source: this.source,
       templateKey: this.templateKey,
-      templateVersion: this.templateVersion,
+      programId: this.programId,
+      position: this.position,
       entries: this.entries.map((e) => e.toJSON()),
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,

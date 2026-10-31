@@ -798,7 +798,7 @@ describe('workout training weight input', () => {
       document.querySelector('[data-export]').click()
       expect(urls).toHaveLength(1)
       const exported = JSON.parse(await urls[0].text())
-      expect(exported.version).toBe(2)
+      expect(exported.version).toBe(3)
       expect(exported.data.exercises).toHaveLength(1)
       expect(document.querySelector('[data-status]').textContent).toContain('Saved workout-backup-')
     })

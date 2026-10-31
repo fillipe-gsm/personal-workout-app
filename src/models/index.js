@@ -3,6 +3,7 @@
  * Each class maps to a table in db_modeling/db_scheme.dbml:
  *
  *   Exercise               → exercise
+ *   WorkoutProgram         → workout_program
  *   WorkoutPlan            → workout_plan
  *   ExerciseInWorkoutPlan  → exercise_in_workout_plan (plan slot + its scheme)
  *   WorkoutSession         → workout_session
@@ -23,6 +24,7 @@ export { WeightPlate } from './weight-plate.js'
 export { WeightProfile } from './weight-profile.js'
 export { ExerciseInWorkoutPlan } from './exercise-in-workout-plan.js'
 export { WorkoutPlan } from './workout-plan.js'
+export { WorkoutProgram } from './workout-program.js'
 export { WorkoutSet } from './workout-set.js'
 export { WorkoutSessionExercise } from './workout-session-exercise.js'
 export { WorkoutSession } from './workout-session.js'

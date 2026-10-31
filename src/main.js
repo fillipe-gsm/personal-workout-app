@@ -3,7 +3,9 @@ import { route, start } from './router.js'
 import './components/home-menu.js'
 import './components/exercise-list.js'
 import './components/plans.js'
+import './components/programs.js'
 import './components/plan-add.js'
+import './components/program-add.js'
 import './components/templates.js'
 import './components/workout-session.js'
 import './components/exercise-history.js'
@@ -21,8 +23,11 @@ function create(tag, attrs = {}) {
 
 route('/', () => create('home-menu'))
 route('/exercises', () => create('exercise-list'))
-route('/plans', () => create('plan-list'))
-route('/plans/add', () => create('plan-add'))
+route('/plans', () => create('program-list')) // legacy link → programs overview
+route('/plans/add', (params, query) => create('plan-add', { 'program-id': query.program }))
+route('/programs', () => create('program-list'))
+route('/programs/add', () => create('program-add'))
+route('/program/:id', (params) => create('program-page', { 'program-id': params.id }))
 route('/templates', () => create('template-list'))
 route('/plan/:id', (params) => create('plan-edit', { 'plan-id': params.id }))
 route('/workout/:id', (params) => create('workout-session', { 'plan-id': params.id }))

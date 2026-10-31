@@ -13,6 +13,8 @@ export class WorkoutSession {
     performedOn,
     planId = null,
     planName = null,
+    programId = null,
+    programName = null,
     note = null,
     exercises = [],
     createdAt,
@@ -23,6 +25,8 @@ export class WorkoutSession {
     this.performedOn = performedOn ?? new Date().toISOString().slice(0, 10)
     this.planId = planId
     this.planName = planName
+    this.programId = programId
+    this.programName = programName
     this.note = note ?? null
     this.exercises = exercises
       .map((e, i) =>
@@ -70,6 +74,8 @@ export class WorkoutSession {
       performedOn: this.performedOn,
       planId: this.planId,
       planName: this.planName,
+      programId: this.programId,
+      programName: this.programName,
       note: this.note,
       exercises: this.exercises.map((e) => e.toJSON()),
       createdAt: this.createdAt,
