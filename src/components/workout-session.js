@@ -326,7 +326,8 @@ export class ExerciseSetBlock extends HTMLElement {
       <div class="row"><button class="btn" data-extra>+ Extra working set</button></div>
       <textarea class="input" data-note placeholder="Add a note... (e.g. This was hard)" rows="2" style="width:100%; margin-top:8px; resize:vertical">${esc(this.note || '')}</textarea>
       <div class="row" style="margin-top:8px"><button class="btn btn-start big" data-save>Save exercise</button></div>
-      ${this.saved ? '<p class="saved-note">✓ Saved</p>' : ''}`
+      ${this.saved ? '<p class="saved-note">✓ Saved</p>' : ''}
+      <div class="row" style="margin-top:8px"><button class="btn btn-danger big" data-discard style="width:100%">Discard exercise</button></div>`
 
     this.querySelectorAll('.reps').forEach((input) =>
       input.addEventListener('input', () => {
@@ -345,6 +346,34 @@ export class ExerciseSetBlock extends HTMLElement {
       this.closest('workout-session')?._pushHistory()
     })
     this.querySelector('[data-save]').addEventListener('click', () => this.save())
+    this.querySelector('[data-discard]').addEventListener('click', () => this.discard())
+  }
+
+  /**
+   * Abandons this exercise attempt and returns to the weight/reps form.
+   * If it was already saved, the history entry is kept (re-enter and save
+   * again to update it).
+   */
+  discard() {
+    const message = this.saved
+      ? 'This exercise is already saved. Discard the current sets and go back to the weight form? The saved history entry is kept until you save again.'
+      : 'Discard this exercise and go back to the weight form? The sets you entered will be lost.'
+    if (!confirm(message)) return
+
+    this.sets = []
+    this.note = ''
+    this.suggestedReps = null
+    this.performedScheme = null
+    this.saved = false
+    this.renderInput()
+
+    const session = this.closest('workout-session')
+    if (!session) return
+    session._stack = (session._stack || []).filter((b) => b !== this)
+    session._pushHistory()
+    const index = session.blocks.indexOf(this)
+    if (index >= 0) session.show(index, { push: false })
+    session.refreshDots?.()
   }
 
   workingWeight() {

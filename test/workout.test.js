@@ -216,6 +216,80 @@ describe('workout training weight input', () => {
     expect(document.querySelector('.dot.done')).not.toBeNull()
   })
 
+  it('discards an exercise and returns to the start form', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    expect(block.sets).toHaveLength(6)
+    expect(history.state?.started).toHaveLength(1)
+
+    block.querySelector('[data-discard]').click()
+    await Promise.resolve()
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(block.sets).toHaveLength(0)
+    expect(block.querySelector('form')).not.toBeNull()
+    expect(block.querySelector('.tw')).not.toBeNull()
+    expect(document.querySelector('.dot.done')).toBeNull()
+    expect(history.state?.started).toHaveLength(0)
+    confirmSpy.mockRestore()
+  })
+
+  it('does not discard when the confirmation is cancelled', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    block.querySelector('[data-discard]').click()
+    await Promise.resolve()
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(block.sets).toHaveLength(6)
+    expect(block.querySelector('[data-save]')).not.toBeNull()
+    confirmSpy.mockRestore()
+  })
+
+  it('discarding a saved exercise keeps its history entry', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { plan, ex } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    block.querySelector('.reps').value = '5'
+    block.querySelector('.reps').dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+    block.querySelector('[data-save]').click()
+    await Promise.resolve()
+    expect(store.getRecordsForExercise(ex.id)).toHaveLength(1)
+
+    block.querySelector('[data-discard]').click()
+    await Promise.resolve()
+
+    expect(block.querySelector('.tw')).not.toBeNull()
+    expect(store.getRecordsForExercise(ex.id)).toHaveLength(1)
+    confirmSpy.mockRestore()
+  })
+
   it('persists reps when going to plates and back', async () => {
     const { plan } = createPlanWithExercise()
     const session = document.createElement('workout-session')
