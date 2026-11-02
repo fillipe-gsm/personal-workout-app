@@ -182,6 +182,40 @@ describe('workout training weight input', () => {
     expect(block2.querySelectorAll('.set-row')).toHaveLength(6)
   })
 
+  it('keeps the saved indicator after navigating away and back', async () => {
+    const { plan } = createPlanWithExercise()
+    const session = document.createElement('workout-session')
+    session.setAttribute('plan-id', plan.id)
+    document.body.append(session)
+
+    const block = document.querySelector('exercise-set-block')
+    block.querySelector('.tw').value = '80'
+    block.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+
+    block.querySelector('.reps').value = '5'
+    block.querySelector('.reps').dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+    block.querySelector('[data-save]').click()
+    await Promise.resolve()
+
+    expect(block.querySelector('.saved-note')).not.toBeNull()
+    expect(document.querySelector('.dot.done')).not.toBeNull()
+    expect(history.state?.started[0].saved).toBe(true)
+
+    // Leave the workout (e.g. open Plates) and come back.
+    document.body.innerHTML = ''
+    await Promise.resolve()
+    const session2 = document.createElement('workout-session')
+    session2.setAttribute('plan-id', plan.id)
+    document.body.append(session2)
+    await Promise.resolve()
+
+    const block2 = document.querySelector('exercise-set-block')
+    expect(block2.querySelector('.saved-note')).not.toBeNull()
+    expect(document.querySelector('.dot.done')).not.toBeNull()
+  })
+
   it('persists reps when going to plates and back', async () => {
     const { plan } = createPlanWithExercise()
     const session = document.createElement('workout-session')

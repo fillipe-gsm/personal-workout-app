@@ -129,7 +129,7 @@ export class WorkoutSession extends HTMLElement {
           block.suggestedReps = entry.suggestedReps ?? null
         } else continue
         block.performedScheme = entry.performedScheme ? SetScheme.fromJSON(entry.performedScheme) : null
-        block.saved = false
+        block.saved = Boolean(entry.saved)
         block.renderSets()
         this._stack.push(block)
       }
@@ -184,7 +184,8 @@ export class WorkoutSession extends HTMLElement {
       sets: b.sets.map((s) => ({ ...s })),
       note: b.note || '',
       suggestedReps: b.suggestedReps ?? null,
-      performedScheme: b.performedScheme ? b.performedScheme.toJSON() : null
+      performedScheme: b.performedScheme ? b.performedScheme.toJSON() : null,
+      saved: Boolean(b.saved)
     }))
     history.replaceState(
       { workoutPlanId: this.getAttribute('plan-id'), started, index: this.index },
@@ -393,6 +394,7 @@ export class ExerciseSetBlock extends HTMLElement {
     this.saved = true
     this.renderSets()
     session?.refreshDots?.()
+    session?._pushHistory()
   }
 }
 
