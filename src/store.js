@@ -272,12 +272,43 @@ export function addExercise(name, category = 'Barbell', setScheme = null) {
 export function updateExercise(id, patch) {
   const exercise = data.exercises.find((e) => e.id === id)
   if (!exercise) return exercise
+  const previousType = exercise.setScheme.type
   if (patch.name != null) exercise.name = String(patch.name).trim()
   if (patch.category != null) exercise.category = normalizeCategory(patch.category)
   if (patch.tier != null || patch.setScheme != null) {
     exercise.setScheme = SetScheme.fromJSON(patch.setScheme, patch.tier)
   }
   if (patch.deletedAt !== undefined) exercise.deletedAt = patch.deletedAt
+
+  // A scheme *type* change (fixed sets ↔ fixed reps) is a change of the form
+  // shown when training. Propagate it to workout slots that were still using
+  // the previous type; slots deliberately customized to another type are left
+  // alone, and history snapshots are never touched.
+  const nextType = exercise.setScheme.type
+  if (nextType !== previousType) {
+    for (const plan of data.plans) {
+      let changed = false
+      for (const entry of plan.entries) {
+        if (entry.exerciseId !== id || entry.setScheme.type !== previousType) continue
+        entry.setScheme = new SetScheme(
+          nextType === 'fixedReps'
+            ? {
+                type: nextType,
+                warmupCount: entry.setScheme.warmupCount,
+                totalReps: exercise.setScheme.totalReps
+              }
+            : {
+                type: nextType,
+                warmupCount: entry.setScheme.warmupCount,
+                workSets: exercise.setScheme.workSets
+              }
+        )
+        changed = true
+      }
+      if (changed) plan.updatedAt = new Date().toISOString()
+    }
+  }
+
   exercise.updatedAt = new Date().toISOString()
   save()
   return exercise

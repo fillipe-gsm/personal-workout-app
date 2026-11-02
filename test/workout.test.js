@@ -616,6 +616,30 @@ describe('workout training weight input', () => {
       expect(block.sets).toHaveLength(0)
     })
 
+    it('uses the updated exercise scheme type in workouts created earlier', async () => {
+      const ex = store.addExercise('Chin-up', 'Bodyweight', {
+        type: 'fixedSets',
+        warmupCount: 1,
+        workSets: 3
+      })
+      const plan = store.addPlan('Pull Plan')
+      store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+
+      // Same as editing the exercise on the Exercises page.
+      store.updateExercise(ex.id, {
+        setScheme: { type: 'fixedReps', warmupCount: 0, totalReps: 20 }
+      })
+
+      const session = document.createElement('workout-session')
+      session.setAttribute('plan-id', plan.id)
+      document.body.append(session)
+
+      const block = document.querySelector('exercise-set-block')
+      expect(block.querySelector('.worksets')).toBeNull()
+      expect(block.querySelector('.total')).not.toBeNull()
+      expect(block.querySelector('.total').value).toBe('20')
+    })
+
     it('fixed sets: uses the scheme warm-up count and prefills the work set count', async () => {
       const ex = store.addExercise('Squat', 'Barbell', { type: 'fixedSets', warmupCount: 1, workSets: 5 })
       const plan = store.addPlan('SetsPlan')

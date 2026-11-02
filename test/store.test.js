@@ -66,6 +66,68 @@ describe('set schemes', () => {
     expect(store.getExercise(ex.id).setScheme).toEqual({ type: 'fixedSets', warmupCount: 1, workSets: 4 })
   })
 
+  it('propagates an exercise scheme type change to workouts still using the old type', () => {
+    const ex = store.addExercise('Chin-up', 'Bodyweight', {
+      type: 'fixedSets',
+      warmupCount: 1,
+      workSets: 3
+    })
+    const plan = store.addPlan('Pull day')
+    store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+    expect(store.getPlan(plan.id).entries[0].setScheme.type).toBe('fixedSets')
+
+    store.updateExercise(ex.id, {
+      setScheme: { type: 'fixedReps', warmupCount: 0, totalReps: 20 }
+    })
+
+    // The exercise holds the new default; the workout slot follows the type
+    // change while keeping its own warm-up count.
+    expect(store.getExercise(ex.id).setScheme.toJSON()).toEqual({
+      type: 'fixedReps',
+      warmupCount: 0,
+      totalReps: 20
+    })
+    expect(store.getPlan(plan.id).entries[0].setScheme.toJSON()).toEqual({
+      type: 'fixedReps',
+      warmupCount: 1,
+      totalReps: 20
+    })
+
+    // And back again: fixed reps → fixed sets.
+    store.updateExercise(ex.id, {
+      setScheme: { type: 'fixedSets', warmupCount: 0, workSets: 4 }
+    })
+    expect(store.getPlan(plan.id).entries[0].setScheme.toJSON()).toEqual({
+      type: 'fixedSets',
+      warmupCount: 1,
+      workSets: 4
+    })
+  })
+
+  it('does not overwrite a workout slot deliberately set to another type', () => {
+    const ex = store.addExercise('Row', 'Barbell', {
+      type: 'fixedSets',
+      warmupCount: 3,
+      workSets: 3
+    })
+    const plan = store.addPlan('Plan')
+    store.updatePlan(plan.id, { exerciseIds: [ex.id] })
+    const entryId = store.getPlan(plan.id).entries[0].id
+    store.updatePlanEntry(plan.id, entryId, {
+      setScheme: { type: 'fixedReps', warmupCount: 0, totalReps: 12 }
+    })
+
+    store.updateExercise(ex.id, {
+      setScheme: { type: 'fixedReps', warmupCount: 0, totalReps: 20 }
+    })
+
+    expect(store.getPlan(plan.id).entries[0].setScheme.toJSON()).toEqual({
+      type: 'fixedReps',
+      warmupCount: 0,
+      totalReps: 12
+    })
+  })
+
   it('clamps invalid scheme values', () => {
     const ex = store.addExercise('X')
     store.updateExercise(ex.id, { setScheme: { type: 'fixedReps', warmupCount: -2, totalReps: 0 } })

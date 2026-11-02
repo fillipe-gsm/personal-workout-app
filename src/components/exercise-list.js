@@ -89,6 +89,7 @@ export class ExerciseList extends ReactiveElement {
             <input class="input" data-edit-scheme-value="${ex.id}" type="number" step="1" min="1" value="${value}" placeholder="${isFixedSetsType(type) ? 'Work sets' : 'Total reps'}" />
           </label>
         </div>
+        <small class="muted">Changing the scheme type also updates workouts still using the previous type.</small>
         <div class="ex-edit-actions">
           <button class="btn btn-small btn-primary" data-save="${ex.id}">Save</button>
           <button class="btn btn-small" data-cancel="${ex.id}">Cancel</button>
