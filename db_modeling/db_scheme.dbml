@@ -157,7 +157,7 @@ Table workout_session_exercise {
   num_warmup_sets int [not null]
   num_working_sets int [note: 'snapshot; set when set_scheme = fixed_sets']
   num_total_reps int [note: 'snapshot; set when set_scheme = fixed_reps']
-  training_weight_kg decimal(6,2) [note: 'total external load; for bodyweight exercises, the added weight']
+  training_weight_kg decimal(6, 2) [note: 'total external load; for bodyweight exercises, the added weight']
   note text
   created_at datetime [not null, default: `now()`]
   updated_at datetime [not null, default: `now()`]
@@ -173,9 +173,9 @@ Table workout_set {
   workout_session_exercise_id text [not null]
   set_index int [not null]
   set_type set_type [not null]
-  weight_kg decimal(6,2) [not null, note: 'bodyweight exercises: added weight (0 when pure bodyweight)']
+  weight_kg decimal(6, 2) [not null, note: 'bodyweight exercises: added weight (0 when pure bodyweight)']
   reps int [note: 'NULL while planned but reps not logged yet']
-  rpe decimal(3,1) [note: 'optional; reserved for future use']
+  rpe decimal(3, 1) [note: 'optional; reserved for future use']
   note text
   created_at datetime [not null, default: `now()`]
   updated_at datetime [not null, default: `now()`]
@@ -193,7 +193,7 @@ Table workout_set {
 Table weight_profile {
   id text [pk]
   name varchar(255) [not null]
-  barbell_kg decimal(5,2) [not null]
+  barbell_kg decimal(5, 2) [not null]
   created_at datetime [not null, default: `now()`]
   updated_at datetime [not null, default: `now()`]
   deleted_at datetime
@@ -206,7 +206,7 @@ Table weight_profile {
 Table weight_plate {
   id text [pk]
   weight_profile_id text [not null]
-  weight_kg decimal(5,2) [not null]
+  weight_kg decimal(5, 2) [not null]
   count int [note: 'total plates across both sides; NULL = unlimited']
 
   indexes {
